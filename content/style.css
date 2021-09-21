@@ -1,0 +1,117 @@
+html, body {
+	display: block;
+	margin: 0;
+	padding: 0;
+	border: 0;
+	min-width: 100vw;
+	min-height: 100vh;
+	background-color: #111;
+	color: #fff;
+	font-family: Arial, Helvetica, sans-serif;
+	overflow: hidden;
+}
+
+a {
+	color: #aaf;
+}
+
+#loading-screen {
+	min-height: 100vh;
+	min-width: 100vw;
+	display: flex;
+	flex-direction: column;
+	justify-content: center;
+	align-items: center;
+}
+
+body > canvas {
+	position: absolute;
+	top: 0;
+	left: 0;
+	right: 0;
+	bottom: 0;
+}
+
+.edit-controls-container {
+	position: absolute;
+	top: 0;
+	left: 0;
+	display: flex;
+	flex-direction: column;
+	justify-content: flex-start;
+	align-items: stretch;
+	background: #222;
+	border: 1px solid #888;
+	border-radius: 0 0 4px 0;
+	border-width: 0 1px 1px 0;
+	padding: 0.5em;
+	width: 400px;
+}
+
+.slider {
+	display: flex;
+	flex-direction: column;
+	align-items: stretch;
+	justify-content: flex-start;
+	padding: 0.25em 0;
+}
+
+.slider-top {
+	display: flex;
+	direction: row;
+	justify-content: space-between;	
+}
+
+.slider-label {
+	margin-right: 0.25em;
+}
+
+.slider-units {
+	color: #ddd;
+	margin-left: 0.25em;
+}
+
+.slider input {
+	flex-grow: 1;
+	flex-shrink: 1;
+	display: box;
+	text-align: center;
+	background: #333;
+	color: #fff;
+	border: 1px dashed #888;
+}
+
+.slider-bottom {
+	display: flex;
+	flex-direction: row;
+	justify-content: space-between;
+	align-items: stretch;
+	margin-top: 0.25em;
+}
+
+.slider-notch-container-container {
+	flex-grow: 1;
+	flex-shrink: 1;
+	border: 1px dashed #888;
+	margin: 0 0.5em;
+	background: #333;
+}
+
+.slider-notch-container {
+	position: relative;
+	margin-right: 0.5em;
+	margin-left: 0.5em;
+	height: 100%;
+}
+
+.slider-notch {
+	position: absolute;
+	top: 0;
+	bottom: 0;
+	width: 1em;
+	margin-left: -0.5em;
+	background-color: #888;
+	border: 1px solid #888;
+	border-radius: 3px;
+	cursor: pointer;
+}
