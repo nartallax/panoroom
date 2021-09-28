@@ -1,19 +1,31 @@
 import {getWebglErrorElement, isWebGLAvailable} from "utils/graphic_utils";
-import {setupEventHandlers} from "event_listeners";
-import {getEditControls} from "controls/edit_controls";
 import {SkyboxController} from "skybox_controller";
 import {AppContextImpl} from "context";
-import {defaultViewSettings, SettingsController} from "settings_controller";
+import {SettingsController} from "settings_controller";
+import {ApiClient} from "api_client";
+import {PlanboxController} from "planbox_controller";
+import {LayoutController} from "layout_controller";
+import {EditorState} from "editor_state";
 
-export function main(): void {
+export async function main(): Promise<void> {
 	checkWebglVersion(1);
 	let context = new AppContextImpl();
-	context.settings = new SettingsController(defaultViewSettings, context);
-	context.skybox = new SkyboxController(context, "./img/test_pano.jpg");
-	context.skybox.start();
+	context.api = new ApiClient("/api/");
+	context.editorState = new EditorState();
 
-	setupEventHandlers(context);
-	document.body.appendChild(getEditControls(context));
+	let [viewSettings, plan, canEdit] = await Promise.all([
+		context.api.loadViewSettings(),
+		context.api.loadBuildingPlan(),
+		context.api.canEdit()
+	])
+	
+	context.settings = new SettingsController(viewSettings, plan, context);
+	
+	context.planbox = new PlanboxController(context);
+	context.skybox = new SkyboxController(context.settings);
+	context.layout = new LayoutController(context, {canEdit, root: document.body});
+
+	context.layout.start();
 }
 
 function checkWebglVersion(version: 1 | 2): void {

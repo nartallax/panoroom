@@ -1,10 +1,29 @@
+import {boundValue, BoundValue, isBoundValue} from "boundable/boundable";
+import {Control, makeNodeBoundWatcher} from "controls/control";
 import {tag} from "utils/dom_utils";
 import {addDragListeners} from "utils/drag";
 import {toFixedNoTrail} from "utils/number_utils";
 
-export function slider(options: {label: string, units?: string; min: number, max: number, value: number, onChange: (v: number) => void}): HTMLElement {
+export interface SliderOptions {
+	label: string;
+	units?: string;
+	min: number;
+	max: number;
+	value: number | BoundValue<number>;
+	integer?: boolean;
+	fractionalPositions?: number;
+}
+
+export interface Slider extends Control {
+	value: BoundValue<number>;
+}
+
+export function slider(options: SliderOptions): Slider {
+	let toFixed = (x: number) => toFixedNoTrail(x, options.fractionalPositions || 5);
+
+	let valueContainer = isBoundValue(options.value)? options.value: boundValue(options.value);
 	let input = tag({tagName: "input", type: "number"});
-	input.value = toFixedNoTrail(options.value, 3);
+	input.value = toFixed(valueContainer());
 	let notch = tag({class: "slider-notch", style: "left: 0"});
 	let notchContainer = tag({class: "slider-notch-container"}, [notch]);
 
@@ -21,14 +40,23 @@ export function slider(options: {label: string, units?: string; min: number, max
 		oldValue = input.value;
 
 		let value = Math.max(options.min, Math.min(options.max, parseFloat(input.value)));
-		setNotchPos(value);
-		options.onChange(value);
+		if(options.integer){
+			value = Math.round(value);
+		}
+		valueContainer(value);
 	}
 
 	function setNotchPos(value: number): void {
 		notch.style.left = (((value - options.min) / (options.max - options.min)) * 100) + "%";
 	}
-	setNotchPos(options.value);
+	setNotchPos(valueContainer());
+
+	function setInputValue(value: number): void {
+		if(options.integer){
+			value = Math.round(value);
+		}
+		input.value = toFixed(value);
+	}
 
 	input.addEventListener("change", onInputMaybeChanged, {passive: true});
 	input.addEventListener("keyup", onInputMaybeChanged, {passive: true});
@@ -50,25 +78,36 @@ export function slider(options: {label: string, units?: string; min: number, max
 		},
 		onDrag: ({x}) => {
 			let percent = Math.max(0, Math.min(1, (x - minX) / (maxX - minX)));
-			notch.style.left = (percent * 100) + "%";
 			let value = options.min + ((options.max - options.min) * percent);
-			input.value = toFixedNoTrail(value, 3);
-			options.onChange(value);
+			valueContainer(value);
 		}
 	})
 
-	return tag({class: "slider"}, [
+	let el = tag({class: "slider"}, [
 		tag({class: "slider-top"}, [
-			tag({class: "slider-label", text: options.label}),
+			tag({class: "editor-label", text: options.label}),
 			input,
 			tag({class: "slider-units", text: options.units || ""}),
 		]),
 		tag({class: "slider-bottom"}, [
-			tag({class: "slider-min", text: toFixedNoTrail(options.min, 3)}),
+			tag({class: "slider-min", text: toFixed(options.min)}),
 			tag({class: "slider-notch-container-container"}, [
 				notchContainer
 			]),
-			tag({class: "slider-max", text: toFixedNoTrail(options.max, 3)})
+			tag({class: "slider-max", text: toFixed(options.max)})
 		])
-	])
+	]);
+
+	let watch = makeNodeBoundWatcher(el);
+	watch(valueContainer, newValue => {
+		setNotchPos(newValue);
+		if(input.value !== toFixed(newValue)){
+			setInputValue(newValue);
+		}
+	})
+
+	return {
+		element: el,
+		value: valueContainer
+	}
 }

@@ -1,13 +1,13 @@
-import {Api} from "api";
 import * as Http from "http";
 import {logError} from "utils";
 import * as Stream from "stream";
+import {ApiWrapper} from "api_wrapper";
 
 export class HttpServer {
 
 	private readonly server: Http.Server;
 	
-	constructor(private readonly api: Api, readonly port: number){
+	constructor(private readonly api: ApiWrapper, readonly port: number){
 		this.server = new Http.Server((req, res) => this.wrappedOnRequest(req, res));
 	}
 
@@ -55,11 +55,14 @@ export class HttpServer {
 		}
 
 		let path = new URL(rawUrl, "http://localhost/").pathname;
+		let bodyBytes: Buffer | undefined = undefined;
 		let body: string | undefined = undefined;
 		if(method === "POST"){
-			let bodyBytes = await this.readAll(req);
+			bodyBytes = await this.readAll(req);
 			body = bodyBytes.toString("utf-8");
 		}
+
+		console.error(`${method} ${rawUrl} ${!bodyBytes? "": bodyBytes.length + " bytes"}`);
 		
 		let result = await this.api.processRequest(path, body);
 		if(result.redirectTo){

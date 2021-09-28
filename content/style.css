@@ -11,6 +11,15 @@ html, body {
 	overflow: hidden;
 }
 
+canvas {
+	z-index: 0;
+	position: absolute;
+	top: 0;
+	left: 0;
+	right: 0;
+	bottom: 0;
+}
+
 a {
 	color: #aaf;
 }
@@ -32,20 +41,35 @@ body > canvas {
 	bottom: 0;
 }
 
-.edit-controls-container {
-	position: absolute;
-	top: 0;
-	left: 0;
+.plan-edit-controls-container, 
+.settings-edit-controls-container {
+	background: #222;
+	border: 1px solid #888;
+	padding: 0.5em;
+	width: 400px;
 	display: flex;
 	flex-direction: column;
 	justify-content: flex-start;
 	align-items: stretch;
-	background: #222;
-	border: 1px solid #888;
-	border-radius: 0 0 4px 0;
+}
+
+.settings-edit-controls-container {
+	position: absolute;
+	top: 0;
+	left: 0;
+	z-index: 100;
 	border-width: 0 1px 1px 0;
-	padding: 0.5em;
-	width: 400px;
+	border-radius: 0 0 4px 0;
+}
+
+.plan-edit-controls-container {
+	border-width: 0 1px 0 0;
+}
+
+.plan-container {
+	display: flex;
+	flex-direction: row;
+	align-items: stretch;
 }
 
 .slider {
@@ -53,7 +77,7 @@ body > canvas {
 	flex-direction: column;
 	align-items: stretch;
 	justify-content: flex-start;
-	padding: 0.25em 0;
+	padding: 0.5em 0;
 }
 
 .slider-top {
@@ -62,8 +86,9 @@ body > canvas {
 	justify-content: space-between;	
 }
 
-.slider-label {
+.editor-label {
 	margin-right: 0.25em;
+	padding: 0.1em 0;
 }
 
 .slider-units {
@@ -71,14 +96,19 @@ body > canvas {
 	margin-left: 0.25em;
 }
 
-.slider input {
-	flex-grow: 1;
-	flex-shrink: 1;
+input, select {
 	display: box;
 	text-align: center;
 	background: #333;
 	color: #fff;
-	border: 1px dashed #888;
+	border: 1px dashed #555;
+	padding: 0.1em 0.25em;
+	font-size: 1rem;
+}
+
+.slider input {
+	flex-grow: 1;
+	flex-shrink: 1;
 }
 
 .slider-bottom {
@@ -92,7 +122,7 @@ body > canvas {
 .slider-notch-container-container {
 	flex-grow: 1;
 	flex-shrink: 1;
-	border: 1px dashed #888;
+	border: 1px dashed #555;
 	margin: 0 0.5em;
 	background: #333;
 }
@@ -114,4 +144,118 @@ body > canvas {
 	border: 1px solid #888;
 	border-radius: 3px;
 	cursor: pointer;
+}
+
+.button, .collapser-header {
+	border: 1px solid #888;
+	border-radius: 4px;
+	padding: 0.5em 1.25em;
+	cursor: pointer;
+	text-align: center;
+	background: #111;
+}
+
+.collapser-header {
+	margin-bottom: 0.25em;
+}
+
+.button.disabled {
+	pointer-events: none;
+	opacity: 0.5;
+}
+
+.button-toolbar {
+	display: flex;
+	flex-direction: row;
+	justify-content: flex-start;
+	align-items: center;
+	padding: 0.25em 0;
+}
+
+.collapser {
+	display: flex;
+	flex-direction: column;
+	align-items: stretch;
+	justify-content: flex-start;
+}
+
+.label.big {
+	font-size: 1.2rem;
+	padding: 0.25em 1.25em;
+}
+
+.label.medium {
+	font-size: 1.1rem;
+	padding: 0.25em 1.25em 0.25em 0;
+}
+
+.view-control-buttons-container {
+	position: absolute;
+	top: 0;
+	right: 0;
+	z-index: 100;
+	display: flex;
+	flex-direction: column;
+	align-items: flex-end;
+}
+
+.plan-wrap {
+	height: 100vh;
+	width: 100vw;
+	overflow: hidden;
+	margin: 0;
+	border: 0;
+	padding: 0;
+	display: flex;
+	flex-direction: row;
+	align-items: stretch;
+	justify-content: flex-start;
+}
+
+.planbox-container {
+	flex-grow: 1;
+	flex-shrink: 1;
+	flex-basis: 1px;
+	position: relative;
+}
+
+.tree-list {
+	border: 1px dashed #555;
+	background: #333;
+	flex-grow: 1;
+	flex-shrink: 1;
+	padding: 0.25em;
+	display: flex;
+	flex-direction: column;
+	justify-content: flex-start;
+	align-items: stretch;
+}
+
+.tree-list-item {
+	cursor: pointer;
+	padding: 0.1em;
+	padding-left: 1.5em;
+}
+
+.tree-list-item.selected {
+	background: #555;
+}
+
+.tree-list-item.has-children {
+	padding-left: 0;
+}
+
+.tree-list-item.has-children::before {
+	font-weight: bold;
+	width: 1em;
+	margin-right: 0.5em;
+	display: inline-block
+}
+
+.tree-list-item.has-children.collapsed::before {
+	content: "v";
+}
+
+.tree-list-item.has-children.expanded::before {
+	content: ">";
 }

@@ -1,92 +1,156 @@
-import {AppContext} from "context";
+import {Boundable} from "boundable/boundable";
+import {makeNodeBoundWatcher} from "controls/control";
+import {SettingsController} from "settings_controller";
 import {THREE} from "threejs_decl";
+import {addDragListeners} from "utils/drag";
 import {raf} from "utils/graphic_utils";
+import {watchNodeResized} from "utils/watch_node_resized";
 
 interface Skybox {
 	geometry: THREE.CylinderGeometry;
 	texture: THREE.Texture;
 	material: THREE.Material;
-	mesh: THREE.Mesh;
+	object: THREE.Object3D;
 }
 
+const defaultSkyboxPath = "./default_skybox.png";
+
 export class SkyboxController {
-	private readonly scene = new THREE.Scene();
-	private readonly camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 1, 10000);
+	protected readonly scene = new THREE.Scene();
+	protected readonly camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 1, 10000);
 	private readonly renderer = new THREE.WebGLRenderer();
 	private readonly skybox: Skybox;
+	private stopRaf: (() => void) | null = null;
+	private stopResizeWatch: (() => void) | null = null;
 
-	constructor(private readonly context: AppContext, private skyboxTexturePath: string){
+	constructor(private readonly settings: SettingsController){
 		this.skybox = this.createSkybox();
-		this.scene.add(this.skybox.mesh);
-		this.camera.fov = this.context.settings.fov;
+		this.scene.add(this.skybox.object);
+		this.camera.fov = this.settings.fov();
 		this.camera.rotation.order = "ZYX";
-		this.camera.position.set(0, this.context.settings.cameraHeight * 1000, 0);
-		this.camera.lookAt(-1, this.context.settings.cameraHeight * 1000, 0);
-		this.camera.lookAt(1, this.context.settings.cameraHeight * 1000, 0);
+		this.camera.position.set(0, this.settings.cameraHeight() * 1000, 0);
+		this.camera.lookAt(-1, this.settings.cameraHeight() * 1000, 0);
+		this.camera.lookAt(1, this.settings.cameraHeight() * 1000, 0);
+
+		let watch = makeNodeBoundWatcher(this.canvas);
+		[settings.fov, settings.cameraHeight, settings.minPitch, settings.maxPitch]
+			.forEach(boundable => {
+				watch(boundable, () => this.updateCamera());
+			});
+
+		[settings.skyboxHeight, settings.skyboxRadius, settings.skyboxWireframe, settings.skyboxRadialSegments]
+			.forEach((boundable: Boundable<unknown>) => {
+				watch(boundable, () => this.updateSkyboxShape());
+			});
+
+		this.setupUserControls();
+	}
+
+	protected setupUserControls(): void {
+		addDragListeners({
+			element: this.canvas,
+			rightMouseButton: true,
+			lockPointer: true,
+			onDrag: ({dx, dy, source}) => {
+				if(source === "touch"){
+					dx *= -1;
+					dy *= -1;
+				}
+				this.rotateCamera(dx, dy);
+			}
+		});
 	}
 
 	get canvas(): HTMLCanvasElement {
 		return this.renderer.domElement;
 	}
 	
-	start(): void {
-		this.renderer.setSize(window.innerWidth, window.innerHeight);
-		document.body.appendChild(this.canvas);
-		raf(() => {
+	start(container: HTMLElement): void {
+		if(this.stopRaf){
+			throw new Error("Already running");
+		}
+		this.renderer.setSize(container.clientWidth, container.clientHeight);
+		container.appendChild(this.canvas);
+		this.stopRaf = raf(timePassed => {
 			this.renderer.render(this.scene, this.camera);
+			this.onFrame(timePassed);
+		});
+		this.stopResizeWatch = watchNodeResized(container, () => {
+			this.renderer.setSize(container.clientWidth, container.clientHeight);
 		});
 	}
 
+	stop(): void {
+		if(this.stopRaf){
+			this.stopRaf();
+			this.stopRaf = null;
+		}
+		if(this.stopResizeWatch){
+			this.stopResizeWatch();
+			this.stopResizeWatch = null;
+		}
+		this.canvas.remove();
+	}
+
+	protected onFrame(timePassed: number): void {
+		// nothing. to be overriden
+		void timePassed
+	}
+
+	get isActive(): boolean {
+		return !!this.stopRaf;
+	}
+
 	private createSkybox(): Skybox {
-		let texture = new THREE.TextureLoader().load(this.skyboxTexturePath)
+		let texture = new THREE.TextureLoader().load(defaultSkyboxPath)
 		let material = new THREE.MeshBasicMaterial({ map: texture, side: THREE.BackSide });
-		let {geometry, mesh} = this.createSkyboxMesh(material);
-		return {texture, material, mesh, geometry};
+		let {geometry, object: mesh} = this.createSkyboxObject(material);
+		return {texture, material, object: mesh, geometry};
 	}
 	
-	private createSkyboxMesh(material: THREE.Material): {geometry: THREE.CylinderGeometry, mesh: THREE.Mesh} {
+	private createSkyboxObject(material: THREE.Material): {geometry: THREE.CylinderGeometry, object: THREE.Object3D} {
 		let geometry = new THREE.CylinderGeometry(
-			this.context.settings.skyboxRadius * 1000, 
-			this.context.settings.skyboxRadius * 1000, 
-			this.context.settings.skyboxHeight * 1000, 
-			256
+			this.settings.skyboxRadius() * 1000, 
+			this.settings.skyboxRadius() * 1000, 
+			this.settings.skyboxHeight() * 1000, 
+			this.settings.skyboxRadialSegments()
 		);
 		patchCylinderUV(geometry);
-		let mesh = new THREE.Mesh(geometry, material);
-		mesh.position.y = (this.context.settings.skyboxHeight / 2) * 1000;
-		return {geometry, mesh}
+		let object: THREE.Object3D;
+		if(this.settings.skyboxWireframe()){
+			object = new THREE.Line(geometry, material);
+		} else {
+			object = new THREE.Mesh(geometry, material);
+		}
+		
+		object.position.y = (this.settings.skyboxHeight() / 2) * 1000;
+		return {geometry, object}
 	}
 
 	private clampPitch(pitch: number): number {
-		return Math.max(this.context.settings.minPitch, Math.min(this.context.settings.maxPitch, pitch));
+		return Math.max(this.settings.minPitch(), Math.min(this.settings.maxPitch(), pitch));
 	}
 
 	rotateCamera(dx: number, dy: number): void {
-		let pitch = this.camera.rotation.x + (dy * this.context.settings.cameraRotationSpeed);
+		let pitch = this.camera.rotation.x + (dy * this.settings.cameraRotationSpeed());
 		this.camera.rotation.x = this.clampPitch(pitch)
-		this.camera.rotation.y += dx * this.context.settings.cameraRotationSpeed;
+		this.camera.rotation.y += dx * this.settings.cameraRotationSpeed();
 	}
 
-	onSkyboxGeometrySourceParametersUpdated(): void {
-		let {geometry, mesh} = this.createSkyboxMesh(this.skybox.material);
-		this.scene.add(mesh);
-		this.scene.remove(this.skybox.mesh);
+	private updateSkyboxShape(): void {
+		let {geometry, object} = this.createSkyboxObject(this.skybox.material);
+		this.scene.add(object);
+		this.scene.remove(this.skybox.object);
 		this.skybox.geometry.dispose();
-		this.skybox.mesh = mesh;
+		this.skybox.object = object;
 		this.skybox.geometry = geometry;
 	}
 
-	onCameraHeightUpdated(): void {
-		this.camera.position.y = this.context.settings.cameraHeight * 1000;
-	}
-
-	onFovUpdated(): void {
-		this.camera.fov = this.context.settings.fov;
-		this.camera.updateProjectionMatrix();
-	}
-
-	onPitchLimitUpdated(): void {
+	private updateCamera(): void {
+		this.camera.fov = this.settings.fov();
+		this.camera.position.y = this.settings.cameraHeight() * 1000;
 		this.camera.rotation.x = this.clampPitch(this.camera.rotation.x)
+		this.camera.updateProjectionMatrix();
 	}
 }
 

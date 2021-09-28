@@ -74,14 +74,14 @@ export function addDragListeners(params: DragListenerParameters): void {
 			prevX = firstTouch.clientX;
 			prevY = firstTouch.clientY;
 
-			window.addEventListener("touchmove", onTouchMove);
-			window.addEventListener("touchend", onTouchEnd);
+			window.addEventListener("touchmove", onTouchMove, {passive: true});
+			window.addEventListener("touchend", onTouchEnd, {passive: true});
 		} else {
 			prevX = evt.clientX;
 			prevY = evt.clientY;
 
-			window.addEventListener("mousemove", onMouseMove);
-			window.addEventListener("mouseup", onMouseUp);
+			window.addEventListener("mousemove", onMouseMove, {passive: true});
+			window.addEventListener("mouseup", onMouseUp, {passive: true});
 		}
 	}
 
@@ -98,7 +98,7 @@ export function addDragListeners(params: DragListenerParameters): void {
 
 	params.element.addEventListener("touchstart", evt => {
 		installDragListeners(evt);
-	});
+	}, {passive: true});
 
 	if(params.rightMouseButton){
 		params.element.addEventListener("contextmenu", evt => {
@@ -110,7 +110,7 @@ export function addDragListeners(params: DragListenerParameters): void {
 	if(params.lockPointer){
 		document.addEventListener("pointerlockchange", () => {
 			pointerIsLocked = document.pointerLockElement === params.element;
-		}, false);
+		}, {capture: false, passive: true});
 	}
 }
 
