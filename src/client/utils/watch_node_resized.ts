@@ -2,6 +2,7 @@
  * возвращает функцию отписки. вызывать её необязательно.
  * может вызвать проблемы, связанные с css-свойством position у элемента
  * all credit goes to https://github.com/marcj/css-element-queries/blob/master/src/ResizeSensor.js
+ * если вызвано в момент, когда el не в DOM или спрятан через display, работать не будет
  */
 export function watchNodeResized(el: HTMLElement, handler: () => unknown): () => void {
 	// RAF здесь используется для предотвращения спама событиями
@@ -58,7 +59,7 @@ export function watchNodeResized(el: HTMLElement, handler: () => unknown): () =>
 		newHeight = el.offsetHeight;
 		dirty = newWidth != lastWidth || newHeight != lastHeight;
 
-		if(dirty && !rafId && handler)
+		if(dirty && !rafId){
 			rafId = requestAnimationFrame(() => {
 				rafId = 0;
 
@@ -67,8 +68,9 @@ export function watchNodeResized(el: HTMLElement, handler: () => unknown): () =>
 				lastWidth = newWidth;
 				lastHeight = newHeight;
 
-				handler && handler();
+				handler();
 			});
+		}
 
 		reset();
 	};
@@ -77,8 +79,7 @@ export function watchNodeResized(el: HTMLElement, handler: () => unknown): () =>
 	shrinkWrap.addEventListener("scroll", onScroll, {passive: true});
 
 	return () => {
-		expandWrap.parentElement && expandWrap.parentElement.removeChild(expandWrap);
-		shrinkWrap.parentElement && shrinkWrap.parentElement.removeChild(shrinkWrap);
+		wrap.remove();
 		expandWrap.removeEventListener("scroll", onScroll);
 		shrinkWrap.removeEventListener("scroll", onScroll);
 	};

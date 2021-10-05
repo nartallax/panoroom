@@ -86,10 +86,7 @@ body > canvas {
 	justify-content: space-between;	
 }
 
-.editor-label {
-	margin-right: 0.25em;
-	padding: 0.1em 0;
-}
+
 
 .slider-units {
 	color: #ddd;
@@ -159,7 +156,8 @@ input, select {
 	margin-bottom: 0.25em;
 }
 
-.button.disabled {
+.button.disabled,
+input:disabled {
 	pointer-events: none;
 	opacity: 0.5;
 }
@@ -189,6 +187,12 @@ input, select {
 	padding: 0.25em 1.25em 0.25em 0;
 }
 
+.label.editor {
+	font-size: 1rem;
+	margin: 0 0.25em;
+	padding: 0.1em 0;
+}
+
 .view-control-buttons-container {
 	position: absolute;
 	top: 0;
@@ -199,7 +203,8 @@ input, select {
 	align-items: flex-end;
 }
 
-.plan-wrap {
+.planbox-container, 
+.skybox-container {
 	height: 100vh;
 	width: 100vw;
 	overflow: hidden;
@@ -212,7 +217,7 @@ input, select {
 	justify-content: flex-start;
 }
 
-.planbox-container {
+.planbox-container-nested {
 	flex-grow: 1;
 	flex-shrink: 1;
 	flex-basis: 1px;
@@ -258,4 +263,20 @@ input, select {
 
 .tree-list-item.has-children.expanded::before {
 	content: ">";
+}
+
+.number-input {
+	flex-grow: 1;
+	flex-shrink: 1;
+	min-width: 3em;
+}
+
+.number-input::-webkit-outer-spin-button,
+.number-input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.number-input {
+  -moz-appearance: textfield;
 }

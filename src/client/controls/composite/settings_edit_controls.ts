@@ -1,17 +1,22 @@
 import {AppContext} from "context";
-import {button} from "controls/button";
-import {collapser} from "controls/collapser";
-import {getSaveButton} from "controls/save_button";
-import {slider} from "controls/slider";
+import {button} from "controls/common/button";
+import {collapser} from "controls/common/collapser";
+import {getSaveButton} from "controls/specific/save_button";
+import {slider} from "controls/common/slider";
 import {tag} from "utils/dom_utils";
+import {panel} from "controls/common/panel";
+import {computable} from "boundable/boundable";
 
 export function getSettingsEditControls(context: AppContext): HTMLElement {
 	let wireframeButton = button({
 		text: "Грани", 
 		onclick: () => context.settings.skyboxWireframe(!context.settings.skyboxWireframe())
-	});
+	});	
 	
-	return tag({ class: "settings-edit-controls-container" }, [
+	return panel({ 
+		class: "settings-edit-controls-container",
+		hidden: computable(() => !context.state.isInEditMode() || context.state.isPlanActive())
+	}, [
 		tag({class: "button-toolbar"}, [
 			tag({class: "label big", text: "Настройки"}),
 			getSaveButton(context)

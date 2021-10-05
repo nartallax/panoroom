@@ -23,7 +23,13 @@ export type PanoramLinkType = "door" | "stairs" | "step";
 // этаж здания. содержит панорамы
 export interface BuildingFloor {
 	label: string;
+	x: number;
 	y: number;
+	z: number;
+	rotation: number;
+	texture?: string;
+	width: number;
+	length: number;
 }
 
 // план здания, он же - главная точка настроек контента

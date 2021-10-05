@@ -5,13 +5,13 @@ import {SettingsController} from "settings_controller";
 import {ApiClient} from "api_client";
 import {PlanboxController} from "planbox_controller";
 import {LayoutController} from "layout_controller";
-import {EditorState} from "editor_state";
+import {AppState} from "app_state";
 
 export async function main(): Promise<void> {
 	checkWebglVersion(1);
 	let context = new AppContextImpl();
 	context.api = new ApiClient("/api/");
-	context.editorState = new EditorState();
+	context.state = new AppState();
 
 	let [viewSettings, plan, canEdit] = await Promise.all([
 		context.api.loadViewSettings(),
@@ -22,7 +22,7 @@ export async function main(): Promise<void> {
 	context.settings = new SettingsController(viewSettings, plan, context);
 	
 	context.planbox = new PlanboxController(context);
-	context.skybox = new SkyboxController(context.settings);
+	context.skybox = new SkyboxController(context.settings, context);
 	context.layout = new LayoutController(context, {canEdit, root: document.body});
 
 	context.layout.start();

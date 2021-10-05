@@ -38,6 +38,7 @@ export function isPathInsidePath(innerPath: string, outerPath: string): boolean 
 export interface FsTreeNode {
 	name: string;
 	children?: FsTreeNode[];
+	dimensions?: {width: number, height: number};
 }
 
 export function randomNumberString(): string {

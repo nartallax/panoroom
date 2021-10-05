@@ -85,7 +85,7 @@ export function slider(options: SliderOptions): Slider {
 
 	let el = tag({class: "slider"}, [
 		tag({class: "slider-top"}, [
-			tag({class: "editor-label", text: options.label}),
+			tag({class: "editor label", text: options.label}),
 			input,
 			tag({class: "slider-units", text: options.units || ""}),
 		]),

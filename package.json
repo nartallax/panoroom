@@ -10,11 +10,13 @@
   "author": "Nartallax",
   "license": "0BSD",
   "dependencies": {
-    "@nartallax/imploder": "^1.1.6"
+    "@nartallax/imploder": "^1.1.6",
+    "image-size": "^1.0.0"
   },
   "devDependencies": {
     "@nartallax/imploder": "^1.1.6",
     "@nartallax/koramund": "^2.0.3",
+    "@types/image-size": "^0.8.0",
     "@types/three": "^0.131.1",
     "@typescript-eslint/eslint-plugin": "^4.31.2",
     "@typescript-eslint/parser": "^4.31.2",

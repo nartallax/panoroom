@@ -1,6 +1,6 @@
 import {computable} from "boundable/boundable";
 import {AppContext} from "context";
-import {button} from "controls/button";
+import {button} from "controls/common/button";
 import {Control} from "controls/control";
 
 export function getSaveButton(context: AppContext): Control {

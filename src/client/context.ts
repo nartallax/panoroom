@@ -1,5 +1,5 @@
 import {ApiClient} from "api_client";
-import {EditorState} from "editor_state";
+import {AppState} from "app_state";
 import {LayoutController} from "layout_controller";
 import {PlanboxController} from "planbox_controller";
 import {SettingsController} from "settings_controller";
@@ -9,7 +9,7 @@ export interface AppContext {
 	skybox: SkyboxController;
 	planbox: PlanboxController;
 	settings: SettingsController;
-	editorState: EditorState;
+	state: AppState;
 	api: ApiClient;
 	layout: LayoutController;
 }
@@ -18,7 +18,7 @@ const emptyAppContext: {[k in keyof AppContext]: null} = {
 	skybox: null,
 	planbox: null,
 	settings: null,
-	editorState: null,
+	state: null,
 	api: null,
 	layout: null
 }

@@ -42,7 +42,7 @@ export const apiMethods = {
 	},
 
 	enumeratePanoramFiles: async (): Promise<FsTreeNode[]> => {
-		return await buildFsTree("./content/panorams/", /\.(jpe?g|png|webp|gif)$/i);
+		return await buildFsTree("./content/img/", /\.(jpe?g|png|webp|gif)$/i, true);
 	},
 
 	canEdit

@@ -1,6 +1,8 @@
 import {Boundable} from "boundable/boundable";
-import {makeNodeBoundWatcher} from "controls/control";
+import {AppContext} from "context";
+import {ControlWatchFn, makeNodeBoundWatcher} from "controls/control";
 import {SettingsController} from "settings_controller";
+import {TextureRepository} from "texture_repo";
 import {THREE} from "threejs_decl";
 import {addDragListeners} from "utils/drag";
 import {raf} from "utils/graphic_utils";
@@ -19,11 +21,14 @@ export class SkyboxController {
 	protected readonly scene = new THREE.Scene();
 	protected readonly camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 1, 10000);
 	private readonly renderer = new THREE.WebGLRenderer();
+	protected readonly textureRepo;
 	private readonly skybox: Skybox;
 	private stopRaf: (() => void) | null = null;
 	private stopResizeWatch: (() => void) | null = null;
+	protected watch: ControlWatchFn;
 
-	constructor(private readonly settings: SettingsController){
+	constructor(private readonly settings: SettingsController, protected readonly context: AppContext){
+		this.textureRepo = new TextureRepository(this.context);
 		this.skybox = this.createSkybox();
 		this.scene.add(this.skybox.object);
 		this.camera.fov = this.settings.fov();
@@ -32,15 +37,15 @@ export class SkyboxController {
 		this.camera.lookAt(-1, this.settings.cameraHeight() * 1000, 0);
 		this.camera.lookAt(1, this.settings.cameraHeight() * 1000, 0);
 
-		let watch = makeNodeBoundWatcher(this.canvas);
+		this.watch = makeNodeBoundWatcher(this.canvas);
 		[settings.fov, settings.cameraHeight, settings.minPitch, settings.maxPitch]
 			.forEach(boundable => {
-				watch(boundable, () => this.updateCamera());
+				this.watch(boundable, () => this.updateCamera());
 			});
 
 		[settings.skyboxHeight, settings.skyboxRadius, settings.skyboxWireframe, settings.skyboxRadialSegments]
 			.forEach((boundable: Boundable<unknown>) => {
-				watch(boundable, () => this.updateSkyboxShape());
+				this.watch(boundable, () => this.updateSkyboxShape());
 			});
 
 		this.setupUserControls();
@@ -57,6 +62,12 @@ export class SkyboxController {
 					dy *= -1;
 				}
 				this.rotateCamera(dx, dy);
+			},
+			onDragStart: () => {
+				let focused = document.activeElement;
+				if(focused && focused instanceof HTMLElement){
+					focused.blur();
+				}
 			}
 		});
 	}
@@ -64,20 +75,26 @@ export class SkyboxController {
 	get canvas(): HTMLCanvasElement {
 		return this.renderer.domElement;
 	}
+
+	private onResize(container: HTMLElement): void {
+		let w = container.clientWidth;
+		let h = container.clientHeight
+		this.renderer.setSize(w, h);
+		this.camera.aspect = w / h;
+		this.camera.updateProjectionMatrix();
+	}
 	
 	start(container: HTMLElement): void {
 		if(this.stopRaf){
 			throw new Error("Already running");
 		}
-		this.renderer.setSize(container.clientWidth, container.clientHeight);
+		this.onResize(container);
 		container.appendChild(this.canvas);
 		this.stopRaf = raf(timePassed => {
 			this.renderer.render(this.scene, this.camera);
 			this.onFrame(timePassed);
 		});
-		this.stopResizeWatch = watchNodeResized(container, () => {
-			this.renderer.setSize(container.clientWidth, container.clientHeight);
-		});
+		this.stopResizeWatch = watchNodeResized(container, () => this.onResize(container));
 	}
 
 	stop(): void {
@@ -102,7 +119,7 @@ export class SkyboxController {
 	}
 
 	private createSkybox(): Skybox {
-		let texture = new THREE.TextureLoader().load(defaultSkyboxPath)
+		let texture = this.textureRepo.pathToTexture(defaultSkyboxPath)
 		let material = new THREE.MeshBasicMaterial({ map: texture, side: THREE.BackSide });
 		let {geometry, object: mesh} = this.createSkyboxObject(material);
 		return {texture, material, object: mesh, geometry};
@@ -146,12 +163,13 @@ export class SkyboxController {
 		this.skybox.geometry = geometry;
 	}
 
-	private updateCamera(): void {
+	protected updateCamera(): void {
 		this.camera.fov = this.settings.fov();
 		this.camera.position.y = this.settings.cameraHeight() * 1000;
 		this.camera.rotation.x = this.clampPitch(this.camera.rotation.x)
 		this.camera.updateProjectionMatrix();
 	}
+
 }
 
 /* меняем UV-маппинг у цилиндра так, чтобы на верхнюю и нижнюю крышку растягивались края панорамы

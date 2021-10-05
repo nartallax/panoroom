@@ -4,6 +4,8 @@ export type Unsubscribe = () => void;
 // TODO: тесты!
 // воскресить старый тест
 // тест на поведение в комментарии к lastKnownValue
+// тест на объекты (см. boundableContentCanBeDifferent)
+// тест на то, что computable подписывается только на те boundable, из которых сам состоит (но не на boundable, из которых состоят эти boundable); т.е. подписывается не рекурсивно
 
 export interface Boundable<T>{
 	(): T;

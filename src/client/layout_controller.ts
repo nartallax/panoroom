@@ -1,94 +1,67 @@
-import {boundValue, computable} from "boundable/boundable";
+import {computable} from "boundable/boundable";
 import {AppContext} from "context";
-import {button} from "controls/button";
-import {getPlanEditControls} from "controls/plan_edit_controls";
-import {getSettingsEditControls} from "controls/settings_edit_controls";
+import {button} from "controls/common/button";
 import {tag} from "utils/dom_utils";
+import {panel} from "controls/common/panel";
+import {makeNodeBoundWatcher} from "controls/control";
+import {getSettingsEditControls} from "controls/composite/settings_edit_controls";
+import {getPlanEditControls} from "controls/composite/plan_edit/plan_edit_controls";
 
 export interface LayoutControllerOptions {
 	canEdit: boolean;
 	root: HTMLElement;
 }
 
+// штука, контролирующая общий layout приложения
 export class LayoutController {
-
-	private isPlanActive = boundValue(false);
-	private isInEditMode = false;
-	private planEditControls: HTMLElement | null = null;
-	private settingsEditControls: HTMLElement | null = null;
-	private readonly planboxContainer = tag({class: "planbox-container"})
-	private readonly planRoot = tag({class: "plan-wrap"}, [this.planboxContainer]);
+	private readonly planboxContainer = tag({class: "planbox-container-nested"})
+	private readonly planRoot = tag({class: "planbox-container"}, [this.planboxContainer]);
+	private readonly skyboxContainer = panel({ class: "skybox-container" })
 
 	constructor(private readonly context: AppContext, private readonly options: LayoutControllerOptions){}
 
 	start(): void {
 		this.options.root.appendChild(this.planRoot);
+		this.options.root.appendChild(this.skyboxContainer);
+
 		this.options.root.appendChild(tag({class: "view-control-buttons-container"}, [
-			!this.options.canEdit? null: button({ text: "Редактирование", onclick: () => this.toggleEditMode() }),
-			button({ 
-				text: computable(() => this.isPlanActive()? "Панорама": "План"), 
-				onclick: () => this.togglePlanAndPanoram()
+			!this.options.canEdit? null: button({ 
+				text: "Редактирование", 
+				onclick: () => this.context.state.isInEditMode(!this.context.state.isInEditMode())
+			}),
+			button({
+				text: computable(() => this.context.state.isPlanActive()? "Панорама": "План"), 
+				onclick: () => this.context.state.isPlanActive(!this.context.state.isPlanActive())
 			})
 		]));
-		this.removeLoadingScreen();
-		this.updateEverything();
-	}
 
-	togglePlanAndPanoram(): void {
-		this.isPlanActive(!this.isPlanActive())
-		this.updateEverything();
-	}
+		this.options.root.appendChild(getSettingsEditControls(this.context));
+		this.planRoot.insertBefore(getPlanEditControls(this.context), this.planboxContainer);
 
-	toggleEditMode(): void {
-		this.isInEditMode = !this.isInEditMode;
-		this.updateEverything();
-	}
-
-	private updateEverything(): void {
-		// говнокод некрасивый, переписать
-		if(this.isInEditMode){
-			if(this.isPlanActive()){
-				if(this.settingsEditControls){
-					this.settingsEditControls.remove();
-					this.settingsEditControls = null;
-				}
-				if(!this.planEditControls){
-					this.planEditControls = getPlanEditControls(this.context);
-					this.planRoot.prepend(this.planEditControls)
+		let watch = makeNodeBoundWatcher(this.options.root);
+		watch(this.context.state.isPlanActive, isPlan => {
+			// я бы мог упаковать это в computable и подписываться на него изнутри панели, но не буду
+			// т.к. тогда подписки изнутри панели будут отрабатывать не обязательно раньше, чем эта подписка
+			// т.е. боксы могут стартануть внутри элементов с display:none
+			// а это ломает им размеры
+			this.planRoot.style.display = isPlan? "": "none";
+			this.skyboxContainer.style.display = isPlan? "none": "";
+			if(isPlan){
+				this.context.skybox.stop();
+				if(!this.context.planbox.isActive){
+					this.context.planbox.start(this.planboxContainer);
 				}
 			} else {
-				if(this.planEditControls){
-					this.planEditControls.remove();
-					this.planEditControls = null;
-				}
-				if(!this.settingsEditControls){
-					this.settingsEditControls = getSettingsEditControls(this.context);
-					this.options.root.appendChild(this.settingsEditControls);
+				this.context.planbox.stop();
+				if(!this.context.skybox.isActive){
+					this.context.skybox.start(this.skyboxContainer);
 				}
 			}
-		} else {
-			if(this.settingsEditControls){
-				this.settingsEditControls.remove();
-				this.settingsEditControls = null;
-			}
-			if(this.planEditControls){
-				this.planEditControls.remove();
-				this.planEditControls = null;
-			}
-		}
-		if(this.isPlanActive()){
-			this.context.skybox.stop();
-			if(!this.context.planbox.isActive){
-				this.context.planbox.start(this.planboxContainer);
-			}
-		} else {
-			this.context.planbox.stop();
-			if(!this.context.skybox.isActive){
-				this.context.skybox.start(this.options.root);
-			}
-		}
+		});
+
+		this.removeLoadingScreen();
 	}
-	
+
 	private removeLoadingScreen(): void {
 		let loadingScreen = document.getElementById("loading-screen");
 		if(loadingScreen){
