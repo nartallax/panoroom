@@ -24,7 +24,7 @@ export class ApiWrapper {
 
 	async processRequest(path: string, body?: string): Promise<ApiResponse>{
 		if(this.params.isDevelopment){
-			if(path === "/content/client.js"){
+			if(path === "/content/static/client.js"){
 				let cfg = await Imploder.parseConfig("./src/client/tsconfig.json", {profile: "development"});
 				let imploder = Imploder.externalInstance(cfg);
 				let code = await imploder.assembleBundle();

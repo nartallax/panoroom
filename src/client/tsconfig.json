@@ -9,7 +9,7 @@
         "target": "es2018",
         "entryModule": "client_entrypoint.ts",
         "entryFunction": "main",
-        "outFile": "../../content/client.js",
+        "outFile": "../../content/static/client.js",
         "moduleBlacklistRegexp": ["^/server/.*?$"],
         "profiles": {
             "development": {

@@ -15,7 +15,7 @@ interface Skybox {
 	object: THREE.Object3D;
 }
 
-const defaultSkyboxPath = "./default_skybox.png";
+const defaultSkyboxPath = "./static/default_skybox.png";
 
 export class SkyboxController {
 	protected readonly scene = new THREE.Scene();

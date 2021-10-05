@@ -4,7 +4,7 @@ import * as Path from "path";
 import {defaultServerConfig, ServerConfig} from "server_config";
 import {FsTreeNode} from "utils";
 
-const serverConfigFilename = "./content/server_config.json";
+const serverConfigFilename = "./content/static/server_config.json";
 
 async function readServerConfig(): Promise<ServerConfig>{
 	let rawFile: string;
@@ -34,7 +34,7 @@ export const apiMethods = {
 			throw new Error("Editing disabled from config, or by default.");
 		}
 		filename = filename.toLowerCase().replace(/\.json$/, "").replace(/[^a-z_\d]/g, "") + ".json";
-		let filePath = Path.resolve("./content/", filename);
+		let filePath = Path.resolve("./content/static/", filename);
 		if(filePath === Path.resolve(serverConfigFilename)){
 			throw new Error("You cannot write to this file with this method.");
 		}

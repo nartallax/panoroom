@@ -27,7 +27,7 @@ export class ApiClient {
 	}
 
 	private async getJson<T>(path: string): Promise<T>{
-		let resp = await fetch(path, { method: "GET" });
+		let resp = await fetch("./static/" + path, { method: "GET" });
 		return await resp.json();
 	}
 
