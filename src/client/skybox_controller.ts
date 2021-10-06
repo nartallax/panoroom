@@ -20,7 +20,7 @@ const defaultSkyboxPath = "./static/default_skybox.png";
 export class SkyboxController {
 	protected readonly scene = new THREE.Scene();
 	protected readonly camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 1, 10000);
-	private readonly renderer = new THREE.WebGLRenderer();
+	protected readonly renderer = new THREE.WebGLRenderer();
 	protected readonly textureRepo;
 	private readonly skybox: Skybox;
 	private stopRaf: (() => void) | null = null;
@@ -125,7 +125,7 @@ export class SkyboxController {
 		return {texture, material, object: mesh, geometry};
 	}
 	
-	private createSkyboxObject(material: THREE.Material): {geometry: THREE.CylinderGeometry, object: THREE.Object3D} {
+	protected createSkyboxObject(material: THREE.Material): {geometry: THREE.CylinderGeometry, object: THREE.Object3D} {
 		let geometry = new THREE.CylinderGeometry(
 			this.settings.skyboxRadius() * 1000, 
 			this.settings.skyboxRadius() * 1000, 
@@ -139,6 +139,7 @@ export class SkyboxController {
 		} else {
 			object = new THREE.Mesh(geometry, material);
 		}
+		object.name = "skybox";
 		
 		object.position.y = (this.settings.skyboxHeight() / 2) * 1000;
 		return {geometry, object}

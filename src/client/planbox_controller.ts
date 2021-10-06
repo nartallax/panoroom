@@ -1,9 +1,9 @@
 import {BuildingFloor} from "building_plan";
 import {AppContext} from "context";
 import {KeyboardCameraControls, setupKeyboardCameraMovement} from "keyboard_camera_movement";
-import {SkyboxController} from "skybox_controller";
-import {THREE} from "threejs_decl";
+import {isInteractiveObject, THREE} from "threejs_decl";
 import {defaultViewSettings} from "settings_controller";
+import {GizmoController} from "gizmo_controller";
 
 interface FloorObject {
 	object: THREE.Object3D;
@@ -12,7 +12,7 @@ interface FloorObject {
 	material: THREE.Material;
 }
 
-export class PlanboxController extends SkyboxController {
+export class PlanboxController extends GizmoController {
 
 	private keyboardCameraControls: KeyboardCameraControls | null = null;
 	private readonly floors: {[floorId: string]: FloorObject} = {};
@@ -24,6 +24,8 @@ export class PlanboxController extends SkyboxController {
 			skyboxHeight: 2,
 			skyboxRadialSegments: 4
 		}), context);
+
+		new THREE.Interaction(this.renderer, this.scene, this.camera);
 
 		this.camera.position.x = 100;
 		this.camera.position.z = 100;
@@ -51,7 +53,7 @@ export class PlanboxController extends SkyboxController {
 		this.keyboardCameraControls = setupKeyboardCameraMovement(this.camera, 0.05)
 	}
 
-	private createFloorObject(floor: BuildingFloor): FloorObject {
+	private createFloorObject(floor: BuildingFloor, floorId: string): FloorObject {
 		let geometry = new THREE.PlaneGeometry(floor.width, floor.length);
 		let texture: string | undefined = undefined;
 		let material: THREE.Material;
@@ -69,14 +71,17 @@ export class PlanboxController extends SkyboxController {
 				transparent: true
 			});
 		}
-		let object = new THREE.Mesh(geometry, material);
-		object.position.y = floor.y + 1000;
-		object.position.x = floor.x;
-		object.position.z = floor.z;
-		object.rotation.x = Math.PI / 2; // иначе он будет стоять вертикально
+		let obj = new THREE.Mesh(geometry, material);
+		obj.position.y = floor.y + 1000;
+		obj.position.x = floor.x;
+		obj.position.z = floor.z;
+		obj.rotation.x = Math.PI / 2; // иначе он будет стоять вертикально
 		// почему z, а не y? вероятно, из-за того, что сначала применяется поворот по x
-		object.rotation.z = floor.rotation;
-		return { geometry, object, material, texture }
+		obj.rotation.z = floor.rotation;
+
+		this.addGizmoHandlers(obj, {type: "floor", floorId }, x => console.log("Moved!", x));
+
+		return { geometry, object: obj, material, texture }
 	}
 
 	protected onFrame(timePassed: number): void {
@@ -104,10 +109,21 @@ export class PlanboxController extends SkyboxController {
 
 		for(let floorId in floors){
 			let floor = floors[floorId];
-			let obj = this.createFloorObject(floor);
+			let obj = this.createFloorObject(floor, floorId);
 			this.scene.add(obj.object);
 			this.floors[floorId] = obj;
 		}
+	}
+
+	protected createSkyboxObject(material: THREE.Material): {geometry: THREE.CylinderGeometry, object: THREE.Object3D} {
+		let result = super.createSkyboxObject(material);
+		if(isInteractiveObject(result.object)){
+			result.object.on("click", () => {
+				this.context.state.selectedSceneObject(null);
+				this.clearGizmo();
+			})
+		}
+		return result;
 	}
 
 }

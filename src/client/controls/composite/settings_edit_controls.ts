@@ -40,7 +40,7 @@ export function getSettingsEditControls(context: AppContext): HTMLElement {
 			}),
 			slider({
 				label: "FOV",
-				min: 30, value: context.settings.fov, max: 150
+				min: 30, value: context.settings.fov, max: 180
 			}),
 			slider({
 				label: "Мин.наклон камеры",
