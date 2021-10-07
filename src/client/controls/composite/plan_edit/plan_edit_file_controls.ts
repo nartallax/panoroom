@@ -16,6 +16,9 @@ function fsTreeToTreeListNodes(fsTree: FsTreeNode[]): TreeListNode[] {
 		let panoramId = node.children? undefined: filenameToPanoramId(currentFullPath);
 
 		let label = node.name;
+		if(panoramId){
+			label = filenameToPanoramId(label);
+		}
 		if(node.dimensions){
 			label += ` (${node.dimensions.width} x ${node.dimensions.height})`;
 		}
@@ -103,7 +106,7 @@ export function getPlanEditFileControls(context: AppContext): HtmlTaggable[] {
 			let panorams = context.settings.panorams();
 			let panoram = panorams[panoramId];
 			if(!panoram.position){
-				panoram.position = {floorId, x: 0, y: 0, rotation: 0 }
+				panoram.position = {floorId, x: 0, z: 0, rotation: 0 }
 				context.settings.panorams.notify();
 			} else if(panoram.position.floorId !== floorId) {
 				panoram.position.floorId = floorId;

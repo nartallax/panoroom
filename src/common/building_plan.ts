@@ -14,7 +14,7 @@ export interface Panoram {
 export interface FloorPosition {
 	floorId: string;
 	x: number;
-	y: number;
+	z: number;
 	rotation: number;
 }
 

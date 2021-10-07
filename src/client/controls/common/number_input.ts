@@ -30,7 +30,7 @@ export function numberInput(opts: NumberInputOptions): Control & {readonly value
 		lastKnownValue = input.value;
 
 		let boundValue = getNestedBoundValue();
-		boundValue(parseFloat(input.value));
+		boundValue(parseFloat(input.value || "0"));
 	}
 
 	input.addEventListener("change", onMaybeChange);
