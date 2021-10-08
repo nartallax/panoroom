@@ -34,7 +34,7 @@ export function getPlanEditFloorControls(context: AppContext): HtmlTaggable[] {
 			}
 			y += 10;
 
-			let floor: BuildingFloor = {label: "Этаж", x: 0, y, z: 0, width: 10, length: 10, rotation: 0};
+			let floor: BuildingFloor = {label: "Этаж " + id, x: 0, y, z: 0, width: 10, length: 10, rotation: 0};
 			floors[id] = (floor);
 			context.settings.floors(floors);
 			context.state.selectedFloor(id);
@@ -78,6 +78,7 @@ export function getPlanEditFloorControls(context: AppContext): HtmlTaggable[] {
 
 	let hideInactiveFloorsToggleButton = button({
 		text: "Прятать",
+		active: context.state.hideInactiveFloors,
 		onclick: () => {
 			context.state.hideInactiveFloors(!context.state.hideInactiveFloors());
 		}

@@ -6,6 +6,7 @@ import {treeList, TreeListNode} from "controls/common/tree_list";
 import {FsTreeNode, logError} from "utils";
 import {Panoram} from "building_plan";
 import {movePositionToLocal} from "utils/three_global_pos_to_local";
+import {slider} from "controls/common/slider";
 
 function filenameToPanoramId(filename: string): string {
 	return filename.toLowerCase().replace(/\.[^./\\]*$/, "");
@@ -178,14 +179,22 @@ export function getPlanEditFileControls(context: AppContext): HtmlTaggable[] {
 		}
 	});
 
+	let planLabelScaleInput = slider({
+		label: "Масштаб текста на плане",
+		value: context.settings.planLabelScale,
+		min: 1/200,
+		max: 1/10
+	})
+
 	return [
-		tag({ class: "button-toolbar" }, [
-			tag({ class: "label medium", text: "Панорамы" }),
-			addPanoramToFloorButton, removePanoramFromFloorButton
-		]),
 		tag({ class: "button-toolbar" }, [
 			tag({ class: "label medium", text: "Текстура этажа" }),
 			setImageBeFloorTexture, clearFloorTexture
+		]),
+		planLabelScaleInput,
+		tag({ class: "button-toolbar" }, [
+			tag({ class: "label medium", text: "Панорамы" }),
+			addPanoramToFloorButton, removePanoramFromFloorButton
 		]),
 		panoramTreeList
 	]

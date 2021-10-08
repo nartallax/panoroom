@@ -32,7 +32,7 @@ export class SkyboxController {
 			textBgColor: "#444",
 			textFgColor: "#ccc",
 			textHeight: 64,
-			textMargin: 10
+			textMargin: 15
 		});
 		this.skybox = this.createSkybox();
 		this.scene.add(this.skybox.object);

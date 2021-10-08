@@ -162,6 +162,12 @@ input:disabled {
 	opacity: 0.5;
 }
 
+.button.active {
+	color: #222;
+	background: #ccc;
+}
+
+
 .button-toolbar {
 	display: flex;
 	flex-direction: row;

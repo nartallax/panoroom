@@ -12,6 +12,7 @@ export interface ViewSettings {
 	minPitch: number;
 	maxPitch: number;
 	cameraRotationSpeed: number;
+	planLabelScale: number;
 }
 
 
@@ -25,7 +26,8 @@ export const defaultViewSettings: ViewSettings = {
 	skyboxRadius: 1.5,
 	skyboxWireframe: false,
 	skyboxRadialSegments: 64,
-	cameraRotationSpeed: 1 / 350
+	cameraRotationSpeed: 1 / 350,
+	planLabelScale: 1 / 20
 }
 
 const defaultBuildPlan: BuildingPlan = {

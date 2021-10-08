@@ -18,7 +18,7 @@ interface FloorObject {
 }
 
 interface PanoramObject {
-	object: THREE.Mesh;
+	mesh: THREE.Mesh;
 	geometry: THREE.BufferGeometry;
 	material: THREE.Material;
 	floorId: string;
@@ -176,8 +176,8 @@ export class PlanboxController extends GizmoController {
 		panoram.geometry.dispose();
 		panoram.material.dispose();
 		this.textureRepo.unrefTextTexture(panoram.label)
-		if(panoram.object.parent){
-			panoram.object.parent.remove(panoram.object)
+		if(panoram.mesh.parent){
+			panoram.mesh.parent.remove(panoram.mesh)
 		}
 		delete this.panorams[panoramId]; 
 	}
@@ -215,35 +215,52 @@ export class PlanboxController extends GizmoController {
 		}
 	}
 
+	private makePanoramMaterialGeometry(text: string): {material: THREE.Material, geometry: THREE.BufferGeometry} {
+		let texture = this.textureRepo.textToTexture(text)
+		let material = new THREE.MeshBasicMaterial({ map: texture.texture, side: THREE.FrontSide })
+		let geometry = new THREE.PlaneGeometry(
+			texture.width * this.context.settings.planLabelScale(), 
+			texture.height * this.context.settings.planLabelScale()
+		);
+		return {material, geometry}
+	}
+
 	private createUpdatePanoramObject(panoram: Panoram, panoramId: string, floorId: string, oldPanoramObject?: PanoramObject): PanoramObject {
 		if(!panoram.position){
 			throw new Error("Could not add panoram: no position");
 		}
 
-		let mesh: THREE.Mesh;
-		let material: THREE.Material;
-		let geometry: THREE.BufferGeometry;
-		let label: string;
+		let mesh: THREE.Mesh | null = null;
+		let material: THREE.Material | null = null
+		let geometry: THREE.BufferGeometry | null = null
+		let label: string | null = null
 		if(oldPanoramObject){
-			mesh = oldPanoramObject.object;
-			material = oldPanoramObject.material;
-			geometry = oldPanoramObject.geometry
-			// тут можно было бы чекать, не изменился ли лейбл, и обновлять, но влом
-			// одинхер мы его не меняем нигде
-			label = oldPanoramObject.label;
-		} else {
-			label = panoram.label;
-			let texture = this.textureRepo.textToTexture(label)
-			material = new THREE.MeshBasicMaterial({ map: texture.texture, side: THREE.FrontSide })
-			geometry = new THREE.PlaneGeometry(texture.width / 20, texture.height / 20);
-			mesh = new THREE.Mesh(geometry, material);
-			mesh.name = "panoram_" + panoramId;
-			mesh.rotation.x = -Math.PI / 2;
+			mesh = oldPanoramObject.mesh;
+			if(oldPanoramObject.label === panoram.label){
+				material = oldPanoramObject.material;
+				geometry = oldPanoramObject.geometry;
+				label = oldPanoramObject.label;
+			} else {
+				oldPanoramObject.material.dispose();
+				oldPanoramObject.geometry.dispose();
+				this.textureRepo.unrefTextTexture(oldPanoramObject.label);
+			}
+		}
+		if(!mesh){
+			mesh = new THREE.Mesh();
 			this.addGizmoHandlers(mesh, mesh, {type: "panoram", panoramId }, 
 				this.floors[floorId].group,
 				dir => this.getPanoramMovementLimits(dir, panoramId)
 			);
 		}
+		if(!label || !material || !geometry){
+			label = panoram.label;
+			let mg = this.makePanoramMaterialGeometry(label);
+			mesh.geometry = geometry = mg.geometry;
+			mesh.material = material = mg.material;
+		}
+		mesh.name = "panoram_" + panoramId;
+		mesh.rotation.x = -Math.PI / 2;
 		mesh.position.x = panoram.position.x;
 		mesh.position.z = panoram.position.z;
 		mesh.position.y = 0.75;
@@ -266,7 +283,7 @@ export class PlanboxController extends GizmoController {
 		}
 
 		let result = Object.assign(oldPanoramObject || {}, {
-			object: mesh, 
+			mesh, 
 			floorId: resultFloorId,
 			material, geometry, label
 		});
@@ -295,7 +312,7 @@ export class PlanboxController extends GizmoController {
 		if(selectedObj && selectedObj.type === "panoram" && selectedObj.panoramId === panoramId){
 			return;
 		}
-		let {floorId, object} = this.panorams[panoramId];
+		let {floorId, mesh: object} = this.panorams[panoramId];
 		let floorGroup = this.floors[floorId].group
 		let pos = new THREE.Vector3();
 		object.getWorldPosition(pos);
@@ -336,6 +353,21 @@ export class PlanboxController extends GizmoController {
 		});
 	
 		this.watch(this.context.state.selectedFloor, floorId => {
+			if(this.context.state.hideInactiveFloors()){
+				for(let otherFloorId in this.floors){
+					let group = this.floors[otherFloorId].group;
+					if(otherFloorId !== floorId && group.parent){
+						group.parent.remove(group);
+					}
+				}
+				if(floorId){
+					let currentFloorGroup = this.floors[floorId].group;
+					if(!currentFloorGroup.parent){
+						this.scene.add(currentFloorGroup);
+					}
+				}
+			}
+
 			let selectedObj = this.context.state.selectedSceneObject();
 			if(selectedObj && (selectedObj.type !== "floor" || selectedObj.floorId === floorId)){
 				return;
@@ -392,6 +424,31 @@ export class PlanboxController extends GizmoController {
 				this.selectPanoram(panoramId);
 			}
 		})
+
+		this.watch(this.context.settings.planLabelScale, () => {
+			for(let panoramId in this.panorams){
+				let p = this.panorams[panoramId];
+				p.material.dispose();
+				p.geometry.dispose();
+				let mg = this.makePanoramMaterialGeometry(p.label);
+				p.mesh.material = p.material = mg.material;
+				p.mesh.geometry = p.geometry = mg.geometry;
+			}
+		});
+
+		this.watch(this.context.state.hideInactiveFloors, doHide => {
+			for(let floorId in this.floors){
+				if(floorId === this.context.state.selectedFloor()){
+					continue;
+				}
+				let floorObj = this.floors[floorId];
+				if(!floorObj.group.parent && !doHide){
+					this.scene.add(floorObj.group)
+				} else if(floorObj.group.parent && doHide){
+					floorObj.group.parent.remove(floorObj.group);
+				}
+			}
+		});
 	}
 
 }
