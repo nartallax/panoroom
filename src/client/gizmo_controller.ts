@@ -39,9 +39,9 @@ export class GizmoController extends SkyboxController {
 		let distance = this.camera.position.distanceTo(v.gizmoPoint);
 		let scale = distance * gizmoDistanceScaleMultiplier; 
 		this.gizmo.scale.x = this.gizmo.scale.y = this.gizmo.scale.z = scale;
-		this.gizmo.position.x = v.gizmoPoint.x + scale;
-		this.gizmo.position.y = v.gizmoPoint.y + scale;
-		this.gizmo.position.z = v.gizmoPoint.z + scale;
+		this.gizmo.position.x = v.gizmoPoint.x;
+		this.gizmo.position.y = v.gizmoPoint.y + scale; // просто чтоб оно не влипало в поверхность
+		this.gizmo.position.z = v.gizmoPoint.z;
 
 		if(v.parent){
 			movePositionToLocal(this.gizmo.position, v.parent);
@@ -67,12 +67,12 @@ export class GizmoController extends SkyboxController {
 	private makeGizmo(): {gizmo: THREE.Group, arrows: Record<"x" | "y" | "z", THREE.Object3D>} {
 		let arrowHeight = 10;
 		let arrowWidth = arrowHeight / 5;
-		let shaftRadius = arrowWidth / 5;
+		let shaftRadius = arrowWidth / 3;
 		let peakHeight = arrowHeight / 5;
 		let arrows = {} as Record<"x" | "y" | "z", THREE.Object3D>
 
 		// можно не сохранять. одинфиг диспозить не придется
-		let shaftGeom = new THREE.CylinderGeometry(shaftRadius, shaftRadius, arrowHeight - peakHeight, 3);
+		let shaftGeom = new THREE.CylinderGeometry(shaftRadius, shaftRadius, arrowHeight - peakHeight, 6);
 		let peakGeom = new THREE.ConeGeometry(arrowWidth / 2, peakHeight, 6);
 		let wrapGeom = new THREE.CylinderGeometry(arrowWidth / 1.5, arrowWidth / 1.5, arrowHeight + arrowWidth, 8);
 		let wrapMaterial = new THREE.MeshBasicMaterial({
@@ -91,17 +91,26 @@ export class GizmoController extends SkyboxController {
 			let result = new THREE.Group();
 
 			let shaft = new THREE.Mesh(shaftGeom, baseMaterial);
+			shaft.name = "shaft_" + direction
 			shaft.position.y = (arrowHeight - peakHeight) / 2;
 			result.add(shaft);
 
 			let peak = new THREE.Mesh(peakGeom, baseMaterial);
+			peak.name = "peak_" + direction;
 			peak.position.y = arrowHeight - (peakHeight / 2);
 			result.add(peak);
 
+			// обертки задумывались как штуки для упрощения нацеливания на стрелочки
+			// но т.к. они прозрачные, они некрасиво интерферируют с поверхностями этажа
+			// и прочими полупрозрачными херовинами
+			// короче, красивее без них
+			void wrapGeom, wrapMaterial;
+			/*
 			let wrap = new THREE.Mesh(wrapGeom, wrapMaterial);
 			wrap.position.y = arrowHeight / 2;
 			wrap.name = "wrap_" + direction;
 			result.add(wrap);
+			*/
 			
 			switch(direction){
 				case "x":
@@ -147,7 +156,10 @@ export class GizmoController extends SkyboxController {
 			return;
 		}
 
-		let firstWrapIntersect = evt.intersects.filter(x => x.object.name.startsWith("wrap_"))[0]
+		let firstWrapIntersect = evt.intersects.filter(x => {
+			let name = x.object.name || ""
+			return name.match(/^(?:wrap|shaft|peak)_/)
+		})[0]
 		const movedObject = this.context.state.selectedSceneObject();
 		if(!firstWrapIntersect || !movedObject){
 			return;
@@ -158,7 +170,7 @@ export class GizmoController extends SkyboxController {
 		let firstWrap = firstWrapIntersect.object;
 		let distanceToIntersection = firstWrapIntersect.distance;
 
-		let direction = firstWrap.name.substr(5) as "x" | "y" | "z";
+		let direction = firstWrap.name.substring(firstWrap.name.length - 1) as "x" | "y" | "z";
 		let startObjValue = movedObject.object.position[direction];
 		let gizmoOffset = this.gizmo.position[direction] - startObjValue;
 
