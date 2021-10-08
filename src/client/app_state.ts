@@ -2,7 +2,12 @@ import {boundValue} from "boundable/boundable";
 import {FsTreeNode} from "utils";
 
 export type SelectedSceneObjectDescription = { type: "floor", floorId: string} | { type: "panoram", panoramId: string }
-export type SelectedSceneObject = SelectedSceneObjectDescription & { object: THREE.Object3D }
+export type SelectedSceneObject = SelectedSceneObjectDescription & { 
+	object: THREE.Object3D;
+	gizmoPoint: THREE.Vector3;
+	parent?: THREE.Group;
+	getLimits?: (direction: "x" | "y" | "z") => [number, number] | null
+}
 
 
 // набор каких-то значений, которые не имеет смысла постоянно хранить

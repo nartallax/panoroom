@@ -111,7 +111,7 @@ export function getPlanEditFileControls(context: AppContext): HtmlTaggable[] {
 			} else if(panoram.position.floorId !== floorId) {
 				panoram.position.floorId = floorId;
 				context.settings.panorams.notify();
-			}			
+			}
 		}
 	});
 	
@@ -132,6 +132,11 @@ export function getPlanEditFileControls(context: AppContext): HtmlTaggable[] {
 			delete panoram.position;
 			delete panoram.links;
 			context.settings.panorams.notify();
+
+			let selectedObj = context.state.selectedSceneObject();
+			if(selectedObj && selectedObj.type === "panoram" && selectedObj.panoramId === panoramId){
+				context.state.selectedSceneObject(null);
+			}
 		}
 	});
 

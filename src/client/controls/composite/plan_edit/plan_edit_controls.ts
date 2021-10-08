@@ -8,7 +8,7 @@ import {getPlanEditFileControls} from "controls/composite/plan_edit/plan_edit_fi
 
 export function getPlanEditControls(context: AppContext): HTMLElement {
 
-	return panel({
+	let result = panel({
 		class: "plan-edit-controls-container",
 		hidden: computable(() => !context.state.isInEditMode() || !context.state.isPlanActive())
 	}, [
@@ -18,6 +18,8 @@ export function getPlanEditControls(context: AppContext): HTMLElement {
 		]),
 		...getPlanEditFloorControls(context),
 		...getPlanEditFileControls(context)
-	])
+	]);
+
+	return result;
 
 }

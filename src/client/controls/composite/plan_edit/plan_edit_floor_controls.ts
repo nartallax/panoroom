@@ -27,7 +27,14 @@ export function getPlanEditFloorControls(context: AppContext): HtmlTaggable[] {
 		onclick: () => {
 			let floors = context.settings.floors()
 			let id = randomUniqId(floors);
-			let floor: BuildingFloor = {label: "Этаж", x: 0, y: 0, z: 0, width: 10, length: 10, rotation: 0};
+			
+			let y = -10;
+			for(let floorId in floors){
+				y = Math.max(y, floors[floorId].y)
+			}
+			y += 10;
+
+			let floor: BuildingFloor = {label: "Этаж", x: 0, y, z: 0, width: 10, length: 10, rotation: 0};
 			floors[id] = (floor);
 			context.settings.floors(floors);
 			context.state.selectedFloor(id);
@@ -59,6 +66,12 @@ export function getPlanEditFloorControls(context: AppContext): HtmlTaggable[] {
 				let floors = context.settings.floors();
 				delete floors[floorId];
 				context.settings.floors(floors);
+				/*
+				let selectedObject = context.state.selectedSceneObject();
+				if(selectedObject && selectedObject.type === "floor" && selectedObject.floorId === floorId){
+					context.state.selectedSceneObject(null);
+				}
+				*/
 			}
 		}
 	});

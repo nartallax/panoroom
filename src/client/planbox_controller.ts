@@ -1,11 +1,11 @@
 import {BuildingFloor, Panoram} from "building_plan";
 import {AppContext} from "context";
 import {KeyboardCameraControls, setupKeyboardCameraMovement} from "keyboard_camera_movement";
-import {isInteractiveObject, THREE} from "threejs_decl";
+import {THREE} from "threejs_decl";
 import {defaultViewSettings} from "settings_controller";
 import {GizmoController} from "gizmo_controller";
 
-const yOffset = 1000;
+export const floorYOffset = 1000;
 
 interface FloorObject {
 	group: THREE.Group;
@@ -31,7 +31,7 @@ export class PlanboxController extends GizmoController {
 		color: "#ddd",
 		side: THREE.FrontSide
 	});	
-	private panoramObjectGeometry = new THREE.CylinderGeometry(3, 3, 1, 8);
+	private panoramObjectGeometry = new THREE.CylinderGeometry(3, 3, 0.5, 8);
 
 	constructor(context: AppContext){
 		super(context.settings.clone({
@@ -50,6 +50,7 @@ export class PlanboxController extends GizmoController {
 
 		this.watch(context.settings.floors, floors => this.updateFloors(floors));
 		this.watch(context.settings.panorams, panorams => this.updatePanorams(panorams));
+		this.linkStates();
 	}
 
 	stop(): void {
@@ -68,19 +69,6 @@ export class PlanboxController extends GizmoController {
 	start(el: HTMLElement): void {
 		super.start(el);
 		this.keyboardCameraControls = setupKeyboardCameraMovement(this.camera, 0.05)
-	}
-
-	protected createSkyboxObject(material: THREE.Material): {geometry: THREE.CylinderGeometry, object: THREE.Object3D} {
-		let result = super.createSkyboxObject(material);
-		if(isInteractiveObject(result.object)){
-			result.object.on("click", () => {
-				if(!this.isGizmoMovingNow){
-					this.context.state.selectedSceneObject(null);
-					this.clearGizmo();
-				}
-			})
-		}
-		return result;
 	}
 
 	protected onFrame(timePassed: number): void {
@@ -146,7 +134,7 @@ export class PlanboxController extends GizmoController {
 		}
 
 		group.position.x = floor.x;
-		group.position.y = floor.y + yOffset;
+		group.position.y = floor.y + floorYOffset;
 		group.position.z = floor.z;
 		group.rotation.y = floor.rotation;
 
@@ -158,14 +146,7 @@ export class PlanboxController extends GizmoController {
 			obj = new THREE.Mesh();
 			obj.name = "floor_" + floorId;
 			group.add(obj);
-			this.addGizmoHandlers(obj, group, {type: "floor", floorId }, pos => {
-				let floors = this.context.settings.floors();
-				let floor = floors[floorId];
-				floor.x = pos.x;
-				floor.y = pos.y - yOffset;
-				floor.z = pos.z;
-				this.context.settings.floors(floors);
-			});
+			this.addGizmoHandlers(obj, group, {type: "floor", floorId });
 		}
 		obj.geometry = geometry;
 		obj.material = material;
@@ -230,18 +211,14 @@ export class PlanboxController extends GizmoController {
 			obj = new THREE.Mesh(this.panoramObjectGeometry, this.panoramObjectMaterial);
 			obj.name = "panoram_" + panoramId;
 			//obj.rotation.x = Math.PI / 2;
-			this.addGizmoHandlers(obj, obj, {type: "panoram", panoramId }, pos => {
-				let panorams = this.context.settings.panorams();
-				let panoram = panorams[panoramId];
-				if(panoram.position){
-					panoram.position.x = pos.x;
-					panoram.position.z = pos.z;
-					this.context.settings.panorams(panorams);
-				}
-			}, this.floors[floorId].group);
+			this.addGizmoHandlers(obj, obj, {type: "panoram", panoramId }, 
+				this.floors[floorId].group,
+				dir => this.getPanoramMovementLimits(dir, panoramId)
+			);
 		}
 		obj.position.x = panoram.position.x;
 		obj.position.z = panoram.position.z;
+		obj.position.y = 0.75;
 
 		let resultFloorId: string | null = null;
 		if(oldPanoramObject){
@@ -288,6 +265,107 @@ export class PlanboxController extends GizmoController {
 				this.panorams[panoramId] = panoramObj;
 			}
 		}
+	}
+
+	// assuming there is such panoram
+	private selectPanoram(panoramId: string){
+		let {floorId, object} = this.panorams[panoramId];
+		let floorGroup = this.floors[floorId].group
+		let pos = new THREE.Vector3();
+		object.getWorldPosition(pos);
+		this.context.state.selectedSceneObject({
+			type: "panoram",
+			object: object,
+			gizmoPoint: pos,
+			panoramId: panoramId,
+			parent: floorGroup,
+			getLimits: dir => this.getPanoramMovementLimits(dir, panoramId)
+		})
+	}
+
+	private getPanoramMovementLimits(direction: "x" | "y" | "z", panoramId: string): [number, number] | null {
+		if(direction === "y"){
+			return null;
+		}
+
+		let floor = this.floors[this.panorams[panoramId].floorId];
+		return direction === "x"? [-floor.width / 2, floor.width / 2]: [-floor.length / 2, floor.length / 2];
+	}
+
+	// провязка состояния контролов и состояния 3д-сцены
+	private linkStates(){
+		this.watch(this.context.state.selectedSceneObject, v => {
+			if(!v){
+				this.context.state.selectedImage(null);
+			} else if(v.type === "panoram"){
+				let panoram = this.context.settings.panorams()[v.panoramId];
+				if(panoram.position){
+					this.context.state.selectedFloor(panoram.position.floorId);
+				}
+				this.context.state.selectedImage(v.panoramId);
+			} else if(v.type === "floor"){
+				this.context.state.selectedFloor(v.floorId)
+				this.context.state.selectedImage(null);
+			}
+		});
+	
+		this.watch(this.context.state.selectedFloor, floorId => {
+			let selectedObj = this.context.state.selectedSceneObject();
+			if(selectedObj && selectedObj.type !== "floor"){
+				return;
+			}
+			if(!floorId){
+				this.context.state.selectedSceneObject(null);
+				return;
+			}
+	
+			let floorObj = this.floors[floorId].group;
+			this.context.state.selectedSceneObject({
+				type: "floor",
+				floorId: floorId,
+				gizmoPoint: floorObj.position,
+				object: floorObj
+			});
+		});
+
+		this.watch(this.context.state.selectedImage, panoramId => {
+			let selectedObj = this.context.state.selectedSceneObject();
+			
+			if(!panoramId){
+				if(selectedObj && selectedObj.type === "panoram"){
+					this.context.state.selectedSceneObject(null);
+				}
+				return;
+			}
+
+			let panoram = this.context.settings.panorams()[panoramId];
+			if(!panoram.position){
+				if(selectedObj && selectedObj.type === "panoram"){
+					this.context.state.selectedSceneObject(null);
+				}
+				return;
+			} else {
+				this.selectPanoram(panoramId);
+			}
+		})
+
+		// чтоб при добавлении панорамы сразу включался гизмо
+		this.watch(this.context.settings.panorams, () => {
+			let panoramId = this.context.state.selectedImage();
+			if(!panoramId){
+				return;
+			}
+
+			let panoram = this.context.settings.panorams()[panoramId];
+			if(!panoram.position){
+				return;
+			}
+
+			let selectedObj = this.context.state.selectedSceneObject();
+			if(selectedObj && selectedObj.type === "floor" && selectedObj.floorId === panoram.position.floorId){
+				this.selectPanoram(panoramId);
+			}
+		})
 	}
 
 }

@@ -105,7 +105,7 @@ export function treeList<T extends string = string>(options: TreeListOptions<T>)
 					itemsByValue.set(item.value, item);
 				}
 				if(item.items){
-					visit(item.items, parent, depth + 1);
+					visit(item.items, item, depth + 1);
 				}
 			})
 		}
@@ -133,9 +133,13 @@ export function treeList<T extends string = string>(options: TreeListOptions<T>)
 	function toggleSelectionOn(value: T | null): void {
 		if(value !== null){
 			let item = itemsByValue.get(value)
-			if(item && item.element){
+			if(!item){
+				return;
+			}
+
+			chainExpand(item);
+			if(item.element){ // должен уже появиться к этому моменту
 				item.element.element.classList.toggle("selected");
-				chainExpand(item);
 			}
 		}
 	}

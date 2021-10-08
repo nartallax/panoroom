@@ -1,39 +1,95 @@
-import {SelectedSceneObjectDescription} from "app_state";
+import {SelectedSceneObject, SelectedSceneObjectDescription} from "app_state";
 import {AppContext} from "context";
+import {floorYOffset} from "planbox_controller";
 import {SettingsController} from "settings_controller";
 import {SkyboxController} from "skybox_controller";
 import {InteractionLib, THREE} from "threejs_decl";
 import {isInteractiveObject} from "threejs_decl";
 
+const gizmoDistanceScaleMultiplier = 1/75;
+
 export class GizmoController extends SkyboxController {
-	protected gizmo: THREE.Object3D;
+	private gizmo: THREE.Group;
+	private arrows = {} as Record<"x" | "y" | "z", THREE.Object3D>
 
 	protected isGizmoMovingNow = false;
-	private targetObjectOnMoved: ((pos: {x: number, y: number, z: number}) => void) | null = null
-	private targetObjectParent: THREE.Group | undefined = undefined;
 
 	constructor(settings: SettingsController, context: AppContext){
 		super(settings, context);
 
-		this.gizmo = this.makeGizmo();
+		let {gizmo, arrows} = this.makeGizmo();
+		this.gizmo = gizmo;
+		this.arrows = arrows;
+		this.watch(this.context.state.selectedSceneObject, v => this.onSelectedObjectUpdate(v))
+		this.watch(this.context.state.isInEditMode, isInEditMode => {
+			if(!isInEditMode){
+				this.clearGizmo();
+			} else {
+				this.onSelectedObjectUpdate(this.context.state.selectedSceneObject());
+			}
+		})
 	}
 
-	private makeGizmo(): THREE.Object3D {
+	private onSelectedObjectUpdate(v: null | SelectedSceneObject): void {
+		if(v === null || !this.context.state.isInEditMode()){
+			this.clearGizmo();
+			return;
+		}
+
+		let distance = this.camera.position.distanceTo(v.gizmoPoint);
+		let scale = distance * gizmoDistanceScaleMultiplier; 
+		this.gizmo.scale.x = this.gizmo.scale.y = this.gizmo.scale.z = scale;
+		this.gizmo.position.x = v.gizmoPoint.x + scale;
+		this.gizmo.position.y = v.gizmoPoint.y + scale;
+		this.gizmo.position.z = v.gizmoPoint.z + scale;
+
+		if(v.parent){
+			// вот тут плохо, потому что учитывает не все изменения в парент-группе
+			// например, если повернуть по x, то будет косяк
+			// или, например, нельзя передать более чем одну парент-группу
+			// но у нас такого нет, так что похер
+			this.gizmo.position.x -= v.parent.position.x;
+			this.gizmo.position.y -= v.parent.position.y;
+			this.gizmo.position.z -= v.parent.position.z;
+			this.gizmo.position.applyAxisAngle(new THREE.Vector3(0, 1, 0), -v.parent.rotation.y);
+			v.parent.add(this.gizmo);
+		} else {
+			this.scene.add(this.gizmo);
+		}
+
+		switch(v.type){
+			case "floor":
+				if(!this.arrows.y.parent){
+					this.gizmo.add(this.arrows.y)
+				}
+				break;
+			case "panoram":
+				if(this.arrows.y.parent){
+					this.gizmo.remove(this.arrows.y)
+				}
+				break;
+		}
+	}
+
+	private makeGizmo(): {gizmo: THREE.Group, arrows: Record<"x" | "y" | "z", THREE.Object3D>} {
 		let arrowHeight = 10;
 		let arrowWidth = arrowHeight / 5;
 		let shaftRadius = arrowWidth / 5;
 		let peakHeight = arrowHeight / 5;
+		let arrows = {} as Record<"x" | "y" | "z", THREE.Object3D>
 
 		// можно не сохранять. одинфиг диспозить не придется
 		let shaftGeom = new THREE.CylinderGeometry(shaftRadius, shaftRadius, arrowHeight - peakHeight, 3);
 		let peakGeom = new THREE.ConeGeometry(arrowWidth / 2, peakHeight, 6);
-		let wrapGeom = new THREE.CylinderGeometry(arrowWidth / 1.5, arrowWidth / 1.5, arrowHeight + arrowWidth);
+		let wrapGeom = new THREE.CylinderGeometry(arrowWidth / 1.5, arrowWidth / 1.5, arrowHeight + arrowWidth, 8);
 		let wrapMaterial = new THREE.MeshBasicMaterial({
 			color: "#000",
 			side: THREE.FrontSide,
 			opacity: 0,
 			transparent: true
 		});
+		let gizmo = new THREE.Group();
+
 		let makeArrow = (direction: "x" | "y" | "z") => {
 			let baseMaterial = new THREE.MeshBasicMaterial({
 				color: direction === "x"? "#f00": direction === "y"? "#00f": "#0f0",
@@ -62,25 +118,21 @@ export class GizmoController extends SkyboxController {
 					result.rotation.x = Math.PI / 2;
 					break;
 			}
-			
-			return result;
+
+			arrows[direction] = result;
+			gizmo.add(result);
 		}
 
-		let yArrow = makeArrow("y");
-		let xArrow = makeArrow("x");
-		let zArrow = makeArrow("z");
-
-		let gizmo = new THREE.Group();
-		gizmo.add(xArrow);
-		gizmo.add(yArrow);
-		gizmo.add(zArrow);
+		makeArrow("x");
+		makeArrow("y");
+		makeArrow("z");
 
 		if(isInteractiveObject(gizmo)){
 			gizmo.cursor = "pointer";
 			gizmo.on("mousedown", evt => this.startMovement(evt));
 		}
 
-		return gizmo;
+		return {gizmo, arrows};
 	}
 
 	protected startMovement(evt: InteractionLib.MouseEvent): void {
@@ -93,6 +145,7 @@ export class GizmoController extends SkyboxController {
 		} else if(origEvent instanceof TouchEvent){
 			let touch = origEvent.touches[0];
 			if(!touch){
+				// wtf
 				return;
 			}
 			startX = touch.clientX;
@@ -114,16 +167,25 @@ export class GizmoController extends SkyboxController {
 
 		let direction = firstWrap.name.substr(5) as "x" | "y" | "z";
 		let startObjValue = movedObject.object.position[direction];
-		let startGizmoValue = this.gizmo.position[direction];
+		let gizmoOffset = this.gizmo.position[direction] - startObjValue;
 
-		let parent = this.targetObjectParent;
+		let parent = this.context.state.selectedSceneObject()?.parent;
 		let camCosX = Math.cos(this.camera.rotation.x - (parent?.rotation?.x ?? 0));
 		let camCosY = Math.cos(this.camera.rotation.y - (parent?.rotation?.y ?? 0));
 		let camSinY = Math.sin(this.camera.rotation.y - (parent?.rotation?.y ?? 0));
 		let vFOV = (this.camera.fov) * (Math.PI / 180);
 		let screenHeight = this.canvas.clientHeight;
 		let screenWidth = this.canvas.clientWidth;
-		let hFOV = Math.atan(Math.tan(vFOV) * this.camera.aspect)
+		let hFOV = Math.atan(Math.tan(vFOV) * this.camera.aspect);
+
+		let minValueLimit = Number.MIN_SAFE_INTEGER;
+		let maxValueLimit = Number.MAX_SAFE_INTEGER;
+		{
+			let limArray = !movedObject.getLimits? null: movedObject.getLimits(direction);
+			if(limArray){
+				[minValueLimit, maxValueLimit] = limArray;
+			}
+		}
 		
 		let onMove = (x: number, y: number) => {
 			let dx = startX - x;
@@ -152,8 +214,8 @@ export class GizmoController extends SkyboxController {
 				} break;
 			}
 			
-			movedObject.object.position[direction] = startObjValue + dVal;
-			this.gizmo.position[direction] = startGizmoValue + dVal;
+			movedObject.object.position[direction] = Math.max(minValueLimit, Math.min(maxValueLimit, startObjValue + dVal));
+			this.gizmo.position[direction] = movedObject.object.position[direction] + gizmoOffset
 		}
 
 		let onMouseMove = (e: MouseEvent) => {
@@ -172,17 +234,7 @@ export class GizmoController extends SkyboxController {
 			window.removeEventListener("touchmove", onTouchMove);	
 			window.removeEventListener("touchend", onMovementFinish);
 			window.removeEventListener("mouseup", onMovementFinish);
-			if(this.targetObjectOnMoved){
-				this.targetObjectOnMoved.call(null, {
-					x: movedObject.object.position.x,
-					y: movedObject.object.position.y,
-					z: movedObject.object.position.z
-				});
-			}
-			setTimeout(() => {
-				// чтобы не обработались хендлеры на клик и гизмо не уехало хер пойми куда после завершения движения
-				this.isGizmoMovingNow = false;
-			}, 25)
+			this.onMovementFinished();
 		}
 		
 		window.addEventListener("mousemove", onMouseMove);
@@ -191,7 +243,42 @@ export class GizmoController extends SkyboxController {
 		window.addEventListener("mouseup", onMovementFinish);
 	}
 
-	protected addGizmoHandlers(targetObject: THREE.Object3D, movedObject: THREE.Object3D, description: SelectedSceneObjectDescription, onMoved: (pos: {x: number, y: number, z: number}) => void, parent?: THREE.Group): void {
+	protected onMovementFinished(): void {
+		setTimeout(() => {
+			// чтобы не обработались хендлеры на клик и гизмо не уехало хер пойми куда после завершения движения
+			this.isGizmoMovingNow = false;
+		}, 25);
+
+		let obj = this.context.state.selectedSceneObject();
+		if(obj){
+			switch(obj.type){
+				case "floor": {
+					let floor = this.context.settings.floors()[obj.floorId];
+					floor.x = obj.object.position.x;
+					floor.y = obj.object.position.y - floorYOffset;
+					floor.z = obj.object.position.z;
+					this.context.settings.floors.notify();
+					break;
+				}
+				case "panoram": {
+					let panoram = this.context.settings.panorams()[obj.panoramId];
+					if(panoram.position){
+						panoram.position.x = obj.object.position.x;
+						panoram.position.z = obj.object.position.z;
+					}
+					this.context.settings.panorams.notify();
+					break;
+				}
+			}
+		}
+	}
+
+	/** 
+	 * @param targetObject объект, на который вешается хендлер на клик
+	 * @param movedObject объект, который будет передвигаться при шевелении гизмо
+	 * @param parent объект, который нужен для того, чтобы учитывать вращение/перемещение
+	*/
+	protected addGizmoHandlers(targetObject: THREE.Object3D, movedObject: THREE.Object3D, description: SelectedSceneObjectDescription, parent?: THREE.Group, getLimits?: (direction: "x" | "y" | "z") => ([number, number] | null)): void {
 		if(!isInteractiveObject(targetObject)){
 			return;
 		}
@@ -201,35 +288,20 @@ export class GizmoController extends SkyboxController {
 				return;
 			}
 
-			this.context.state.selectedSceneObject({
-				...description,
-				object: movedObject
-			});
-			const target = clickEvent.currentTarget || clickEvent.target;
 			const intersection = clickEvent.intersects.sort((a, b) => a.distance - b.distance)[0];
-			if(!target || !intersection){
+			if(!intersection){
+				// wtf
+				this.clearGizmo();
 				return;
 			}
 
-			let scale = intersection.distance / 75;
-			this.gizmo.scale.x = this.gizmo.scale.y = this.gizmo.scale.z = scale;
-			if(parent){
-				intersection.point.x -= parent.position.x;
-				intersection.point.y -= parent.position.y;
-				intersection.point.z -= parent.position.z;
-				intersection.point.applyAxisAngle(new THREE.Vector3(0, 1, 0), -parent.rotation.y);
-				this.gizmo.position.x = intersection.point.x + scale;
-				this.gizmo.position.y = intersection.point.y + scale;
-				this.gizmo.position.z = intersection.point.z + scale;
-				parent.add(this.gizmo);
-			} else {
-				this.gizmo.position.x = intersection.point.x + scale;
-				this.gizmo.position.y = intersection.point.y + scale;
-				this.gizmo.position.z = intersection.point.z + scale;
-				this.scene.add(this.gizmo);
-			}
-			this.targetObjectOnMoved = onMoved;
-			this.targetObjectParent = parent;
+			this.context.state.selectedSceneObject({
+				...description,
+				gizmoPoint: intersection.point,
+				object: movedObject,
+				parent, getLimits
+			});
+			
 		})
 	
 	}
@@ -238,7 +310,18 @@ export class GizmoController extends SkyboxController {
 		if(this.gizmo.parent){
 			this.gizmo.parent.remove(this.gizmo);
 		}
-		this.targetObjectParent = undefined;
-		this.targetObjectOnMoved = null;
+	}
+
+	protected createSkyboxObject(material: THREE.Material): {geometry: THREE.CylinderGeometry, object: THREE.Object3D} {
+		let result = super.createSkyboxObject(material);
+		if(isInteractiveObject(result.object)){
+			result.object.on("click", () => {
+				if(!this.isGizmoMovingNow){
+					this.context.state.selectedSceneObject(null);
+					this.clearGizmo();
+				}
+			})
+		}
+		return result;
 	}
 }
