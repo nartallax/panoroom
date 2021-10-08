@@ -4,6 +4,8 @@ import {computable} from "boundable/boundable";
 import {button} from "controls/common/button";
 import {treeList, TreeListNode} from "controls/common/tree_list";
 import {FsTreeNode, logError} from "utils";
+import {Panoram} from "building_plan";
+import {movePositionToLocal} from "utils/three_global_pos_to_local";
 
 function filenameToPanoramId(filename: string): string {
 	return filename.toLowerCase().replace(/\.[^./\\]*$/, "");
@@ -37,8 +39,7 @@ function fsTreeToTreeListNodes(fsTree: FsTreeNode[]): TreeListNode[] {
 	return treeItems;
 }
 
-function fsTreeToPanoramFsPath(fsTree: FsTreeNode[]): {[id: string]: string} {
-	let panorams = {} as {[id: string]: string}
+function updatePanoramsByFsTree(fsTree: FsTreeNode[], knownPanorams: { [panoramId:string]: Panoram}): void {
 	let visit = (node: FsTreeNode, parentPath: string): void => {
 		let currentFullPath = (parentPath? parentPath + "/": "") + node.name;
 		let panoramId: string | undefined = undefined;
@@ -46,12 +47,15 @@ function fsTreeToPanoramFsPath(fsTree: FsTreeNode[]): {[id: string]: string} {
 			node.children.forEach(node => visit(node, currentFullPath));
 		} else {
 			panoramId = filenameToPanoramId(currentFullPath);
-			panorams[panoramId] = currentFullPath;
+			if(!(panoramId in knownPanorams)){
+				knownPanorams[panoramId] = {filename: "", label: ""}
+			}
+			knownPanorams[panoramId].filename = currentFullPath
+			knownPanorams[panoramId].label = filenameToPanoramId(node.name)
 		}
 	}
 
 	fsTree.forEach(node => visit(node, ""));
-	return panorams;
 }
 
 async function loadPanoramsFromFs(context: AppContext): Promise<void> {
@@ -59,20 +63,8 @@ async function loadPanoramsFromFs(context: AppContext): Promise<void> {
 		let fsPanoramTree = await context.api.enumeratePanoramFiles();
 		context.state.panoramFsTree(fsPanoramTree);
 
-		let allPanoramFsPaths = fsTreeToPanoramFsPath(fsPanoramTree);
 		let knownPanorams = context.settings.panorams();
-		for(let knownPanoramId in knownPanorams){
-			let newPanoramFilename = allPanoramFsPaths[knownPanoramId];
-			if(newPanoramFilename){
-				knownPanorams[knownPanoramId].filename = newPanoramFilename
-			}
-		}
-
-		for(let newPanoramId in allPanoramFsPaths){
-			if(!(newPanoramId in knownPanorams)){
-				knownPanorams[newPanoramId] = { filename: allPanoramFsPaths[newPanoramId] }
-			}
-		}
+		updatePanoramsByFsTree(fsPanoramTree, knownPanorams);
 		context.settings.panorams(knownPanorams)
 	} catch(e){
 		logError(e);
@@ -107,11 +99,19 @@ export function getPlanEditFileControls(context: AppContext): HtmlTaggable[] {
 			let panoram = panorams[panoramId];
 			if(!panoram.position){
 				panoram.position = {floorId, x: 0, z: 0, rotation: 0 }
-				context.settings.panorams.notify();
 			} else if(panoram.position.floorId !== floorId) {
 				panoram.position.floorId = floorId;
-				context.settings.panorams.notify();
 			}
+
+			let selectedObj = context.state.selectedSceneObject();
+			if(selectedObj && selectedObj.type === "floor"){
+				let vec = selectedObj.gizmoPoint.clone()
+				movePositionToLocal(vec, selectedObj.object);
+				panoram.position.x = vec.x;
+				panoram.position.z = vec.z;
+			}
+
+			context.settings.panorams.notify();
 		}
 	});
 	

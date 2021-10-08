@@ -1,24 +1,34 @@
 import {AppContext} from "context";
 import {THREE} from "threejs_decl";
+import {renderTextToTexture, TextToTextureRenderResult} from "utils/three_text_render";
+
+export interface TextureRepositoryOptions {
+	textMargin: number;
+	textHeight: number;
+	textFgColor: string;
+	textBgColor: string;
+}
 
 export class TextureRepository {
 	private readonly textureLoader = new THREE.TextureLoader();
-	private readonly textures = {} as {[path: string]: {texture: THREE.Texture, refCount: number }}
-	private readonly cleanupList = new Set<string>();
+	private readonly imageTextures = {} as {[path: string]: {texture: THREE.Texture, refCount: number }}
+	private readonly textTextures = {} as {[text: string]: { rendered: TextToTextureRenderResult, refCount: number }}
+	private readonly imageCleanupList = new Set<string>();
+	private readonly textCleanupList = new Set<string>();
 	private cleanupHandler: (NodeJS.Timeout | number) | null = null;
 
-	constructor(private readonly context: AppContext){}
+	constructor(private readonly context: AppContext, private readonly options: TextureRepositoryOptions){}
 
 	pathToTexture(path: string): THREE.Texture {
-		if(!this.textures[path]){
-			this.textures[path] = {
+		if(!this.imageTextures[path]){
+			this.imageTextures[path] = {
 				texture: this.textureLoader.load(path),
 				refCount: 1
 			}
 		} else {
-			this.textures[path].refCount++;
+			this.imageTextures[path].refCount++;
 		}
-		return this.textures[path].texture;
+		return this.imageTextures[path].texture;
 	}
 
 	private imageIdToPath(imageId: string): string {
@@ -36,10 +46,37 @@ export class TextureRepository {
 	}
 
 	unrefTextureByPath(path: string): void {
-		let descr = this.textures[path];
+		let descr = this.imageTextures[path];
 		descr.refCount--;
 		if(descr.refCount < 1){
-			this.cleanupList.add(path);
+			this.imageCleanupList.add(path);
+			this.initCleanup();
+		}
+	}
+
+	textToTexture(text: string): TextToTextureRenderResult {
+		if(!this.textTextures[text]){
+			this.textTextures[text] = {
+				rendered: renderTextToTexture(text, 
+					this.options.textHeight,
+					this.options.textMargin,
+					this.options.textMargin,
+					this.options.textFgColor,
+					this.options.textBgColor
+				),
+				refCount: 1
+			}
+		} else {
+			this.textTextures[text].refCount++;
+		}
+		return this.textTextures[text].rendered;
+	}
+
+	unrefTextTexture(text: string): void {
+		let descr = this.textTextures[text];
+		descr.refCount--;
+		if(descr.refCount < 1){
+			this.textCleanupList.add(text);
 			this.initCleanup();
 		}
 	}
@@ -48,14 +85,25 @@ export class TextureRepository {
 		if(!this.cleanupHandler){
 			this.cleanupHandler = setTimeout(() => {
 				this.cleanupHandler = null;
-				this.cleanupList.forEach(path => {
-					let item = this.textures[path];
+
+				this.imageCleanupList.forEach(path => {
+					let item = this.imageTextures[path];
 					if(item.refCount === 0){
-						delete this.textures[path];
+						delete this.imageTextures[path];
 						item.texture.dispose();
 					}
 				})
-				this.cleanupList.clear();
+				this.imageCleanupList.clear();
+
+				this.textCleanupList.forEach(text => {
+					let item = this.textTextures[text];
+					if(item.refCount === 0){
+						delete this.textTextures[text];
+						item.rendered.texture.dispose();
+					}
+				})
+				this.textCleanupList.clear();
+
 			}, 1000);
 		}
 	}

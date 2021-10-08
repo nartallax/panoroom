@@ -1,6 +1,7 @@
 // одна панорама. точка в реальном пространстве
 export interface Panoram {
 	filename: string;
+	label: string;
 	position?: FloorPosition;
 	links?: {
 		type: PanoramLinkType;

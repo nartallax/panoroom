@@ -28,7 +28,12 @@ export class SkyboxController {
 	protected watch: ControlWatchFn;
 
 	constructor(private readonly settings: SettingsController, protected readonly context: AppContext){
-		this.textureRepo = new TextureRepository(this.context);
+		this.textureRepo = new TextureRepository(this.context, {
+			textBgColor: "#444",
+			textFgColor: "#ccc",
+			textHeight: 64,
+			textMargin: 10
+		});
 		this.skybox = this.createSkybox();
 		this.scene.add(this.skybox.object);
 		this.camera.fov = this.settings.fov();

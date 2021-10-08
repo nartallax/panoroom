@@ -3,8 +3,8 @@ import {AppContext} from "context";
 import {floorYOffset} from "planbox_controller";
 import {SettingsController} from "settings_controller";
 import {SkyboxController} from "skybox_controller";
-import {InteractionLib, THREE} from "threejs_decl";
-import {isInteractiveObject} from "threejs_decl";
+import {isInteractiveObject, InteractionLib, THREE} from "threejs_decl";
+import {movePositionToLocal} from "utils/three_global_pos_to_local";
 
 const gizmoDistanceScaleMultiplier = 1/75;
 
@@ -44,14 +44,7 @@ export class GizmoController extends SkyboxController {
 		this.gizmo.position.z = v.gizmoPoint.z + scale;
 
 		if(v.parent){
-			// вот тут плохо, потому что учитывает не все изменения в парент-группе
-			// например, если повернуть по x, то будет косяк
-			// или, например, нельзя передать более чем одну парент-группу
-			// но у нас такого нет, так что похер
-			this.gizmo.position.x -= v.parent.position.x;
-			this.gizmo.position.y -= v.parent.position.y;
-			this.gizmo.position.z -= v.parent.position.z;
-			this.gizmo.position.applyAxisAngle(new THREE.Vector3(0, 1, 0), -v.parent.rotation.y);
+			movePositionToLocal(this.gizmo.position, v.parent);
 			v.parent.add(this.gizmo);
 		} else {
 			this.scene.add(this.gizmo);
@@ -251,6 +244,7 @@ export class GizmoController extends SkyboxController {
 
 		let obj = this.context.state.selectedSceneObject();
 		if(obj){
+			obj.gizmoPoint = this.gizmo.position;
 			switch(obj.type){
 				case "floor": {
 					let floor = this.context.settings.floors()[obj.floorId];
