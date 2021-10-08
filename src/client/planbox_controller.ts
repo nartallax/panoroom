@@ -122,7 +122,8 @@ export class PlanboxController extends GizmoController {
 				textureImageId = floor.texture;
 				material = new THREE.MeshBasicMaterial({ 
 					map: this.textureRepo.imageIdToTexture(floor.texture),
-					side: THREE.DoubleSide
+					side: THREE.DoubleSide,
+					transparent: true
 				})
 			} else {
 				material = new THREE.MeshBasicMaterial({
