@@ -6,7 +6,6 @@ export interface Panoram {
 	links?: {
 		type: PanoramLinkType;
 		panoramId: string;
-		label: string;
 		x: number;
 		y: number;
 	}[];

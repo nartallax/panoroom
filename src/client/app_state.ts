@@ -1,4 +1,5 @@
 import {boundValue} from "boundable/boundable";
+import {PanoramLinkType} from "building_plan";
 import {FsTreeNode} from "utils";
 
 export type SelectedSceneObjectDescription = { type: "floor", floorId: string} | { type: "panoram", panoramId: string }
@@ -20,4 +21,6 @@ export class AppState {
 	readonly hideInactiveFloors = boundValue(false);
 	readonly panoramFsTree = boundValue([] as FsTreeNode[])
 	readonly selectedSceneObject = boundValue(null as null | SelectedSceneObject);
+	readonly isInLinkMode = boundValue(false);
+	readonly selectedLinkType = boundValue<PanoramLinkType>("step");
 }

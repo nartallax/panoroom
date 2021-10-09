@@ -1,7 +1,7 @@
 import {BuildingFloor, Panoram} from "building_plan";
 import {AppContext} from "context";
 import {KeyboardCameraControls, setupKeyboardCameraMovement} from "keyboard_camera_movement";
-import {THREE} from "threejs_decl";
+import {isInteractiveObject, THREE} from "threejs_decl";
 import {defaultViewSettings} from "settings_controller";
 import {GizmoController} from "gizmo_controller";
 
@@ -23,6 +23,13 @@ interface PanoramObject {
 	material: THREE.Material;
 	floorId: string;
 	label: string;
+	links: {[panoramIdTo: string]: LinkObject}
+}
+
+interface LinkObject {
+	mesh: THREE.Object3D;
+	fromId: string;
+	toId: string;
 }
 
 export class PlanboxController extends GizmoController {
@@ -31,13 +38,9 @@ export class PlanboxController extends GizmoController {
 	private floors: {[floorId: string]: FloorObject} = {};
 	private panorams: {[panoramId: string]: PanoramObject} = {};
 	
-	/*
-	private panoramObjectMaterial = new THREE.MeshBasicMaterial({
-		color: "#ddd",
-		side: THREE.FrontSide
-	});	
-	private panoramObjectGeometry = new THREE.CylinderGeometry(3, 3, 0.5, 8);
-	*/
+	private linkLineMaterial = new THREE.MeshBasicMaterial({ color: "#FFAE00", side: THREE.FrontSide });
+	private linkLineGeometry = new THREE.CylinderGeometry(0.5, 0.5, 1, 4);
+	private linkSelectStartPanoramId = null as string | null;
 	
 
 	constructor(context: AppContext){
@@ -249,6 +252,7 @@ export class PlanboxController extends GizmoController {
 		}
 		if(!mesh){
 			mesh = new THREE.Mesh();
+			this.addLinkageHandlers(mesh, panoramId);
 			this.addGizmoHandlers(mesh, mesh, {type: "panoram", panoramId }, 
 				this.floors[floorId].group,
 				dir => this.getPanoramMovementLimits(dir, panoramId)
@@ -283,12 +287,114 @@ export class PlanboxController extends GizmoController {
 			floor.group.add(mesh);
 		}
 
+		let oldLinkObjects: {[panoramIdTo: string]: LinkObject} = oldPanoramObject?.links || {};
+		let linkObjects: {[panoramIdTo: string]: LinkObject} = {};
+		if(oldPanoramObject){
+			oldPanoramObject.links = linkObjects;
+		}
+		(panoram.links || []).forEach(link => {
+			if(link.panoramId in oldLinkObjects){
+				linkObjects[link.panoramId] = oldLinkObjects[link.panoramId]
+				this.calcAndSetRotationScaleForLinkLine(
+					this.panorams[link.panoramId].mesh, 
+					this.panorams[panoramId].mesh,
+					oldLinkObjects[link.panoramId].mesh
+				);
+			} else {
+				// проверка - чтобы при загрузке не пытаться создавать линки между объектами раньше объектов
+				// т.е. ничего страшного, если другого объекта нет - когда дойдет очередь до другого объекта, линк будет создан
+				if(link.panoramId in this.panorams && mesh){
+					let newLink = this.makeLinkObject(mesh, panoramId, this.panorams[link.panoramId].mesh, link.panoramId);
+					linkObjects[link.panoramId] = newLink;
+					this.panorams[link.panoramId].links[panoramId] = newLink;
+					this.scene.add(newLink.mesh);
+				}
+			}
+		});
+		for(let otherPanoramId in oldLinkObjects){
+			if(!(otherPanoramId in linkObjects)){
+				let oldLinkObject = oldLinkObjects[otherPanoramId];
+				if(oldLinkObject.mesh.parent){
+					oldLinkObject.mesh.parent.remove(oldLinkObject.mesh);
+				}
+				delete oldLinkObjects[otherPanoramId];
+				delete this.panorams[otherPanoramId].links[panoramId];
+			}
+		}
+
 		let result = Object.assign(oldPanoramObject || {}, {
 			mesh, 
 			floorId: resultFloorId,
-			material, geometry, label
+			material, geometry, label,
+			links: linkObjects
 		});
 		return result;
+	}
+
+	private makeLinkObject(fromPanoramMesh: THREE.Object3D, fromPanoramId: string, toPanoramMesh: THREE.Object3D, toPanoramId: string): LinkObject {
+		let mesh = new THREE.Mesh(this.linkLineGeometry, this.linkLineMaterial);
+		mesh.rotation.order = "ZYX";
+		mesh.position.y = 0.1;
+		this.calcAndSetRotationScaleForLinkLine(fromPanoramMesh, toPanoramMesh, mesh);
+		return {
+			fromId: fromPanoramId,
+			toId: toPanoramId,
+			mesh
+		}
+	}
+
+	private addLinkageHandlers(mesh: THREE.Object3D, panoramId: string): void {
+		if(!isInteractiveObject(mesh)){
+			return;
+		}
+
+		mesh.on("mousedown", () => {
+			if(!this.context.state.isInLinkMode() || !this.context.state.isInEditMode()){
+				return;
+			}
+
+			this.linkSelectStartPanoramId = panoramId;
+		});
+
+		mesh.on("mouseup", () => {
+			if(!this.context.state.isInLinkMode() || !this.context.state.isInEditMode() || !this.linkSelectStartPanoramId){
+				return;
+			}
+
+			let fromId = this.linkSelectStartPanoramId;
+			let toId = panoramId;
+			this.linkSelectStartPanoramId = null;
+			if(fromId === toId){
+				return;
+			}
+
+			let existingLink = this.panorams[fromId].links[toId];
+			let panorams = this.context.settings.panorams();
+			let toLinks = panorams[toId].links || [];
+			let fromLinks = panorams[fromId].links || [];
+			if(existingLink){
+				toLinks = toLinks.filter(x => x.panoramId !== fromId);
+				fromLinks = fromLinks.filter(x => x.panoramId !== toId);
+			} else {
+				toLinks.push({
+					panoramId: fromId,
+					type: this.context.state.selectedLinkType(),
+					x: Math.random() * Math.PI * 2, // eh
+					y: 1
+				})
+
+				fromLinks.push({
+					panoramId: toId,
+					type: this.context.state.selectedLinkType(),
+					x: Math.random() * Math.PI * 2,
+					y: 1
+				});
+			}
+
+			panorams[toId].links = toLinks.length === 0? undefined: toLinks;
+			panorams[fromId].links = fromLinks.length === 0? undefined: fromLinks;
+			this.context.settings.panorams.notify();
+		})
 	}
 
 	private updatePanorams(panorams: {[panoramId: string]: Panoram}): void {
@@ -450,6 +556,7 @@ export class PlanboxController extends GizmoController {
 				}
 			}
 		});
+
 	}
 
 }

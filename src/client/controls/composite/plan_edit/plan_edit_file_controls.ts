@@ -4,9 +4,10 @@ import {computable} from "boundable/boundable";
 import {button} from "controls/common/button";
 import {treeList, TreeListNode} from "controls/common/tree_list";
 import {FsTreeNode, logError} from "utils";
-import {Panoram} from "building_plan";
+import {Panoram, PanoramLinkType} from "building_plan";
 import {movePositionToLocal} from "utils/three_global_pos_to_local";
 import {slider} from "controls/common/slider";
+import {dropDownList} from "controls/common/drop_down_list";
 
 function filenameToPanoramId(filename: string): string {
 	return filename.toLowerCase().replace(/\.[^./\\]*$/, "");
@@ -115,6 +116,28 @@ export function getPlanEditFileControls(context: AppContext): HtmlTaggable[] {
 			context.settings.panorams.notify();
 		}
 	});
+
+	let toggleLinkModeButton = button({
+		text: "Связи",
+		active: context.state.isInLinkMode,
+		onclick: () => {
+			context.state.isInLinkMode(!context.state.isInLinkMode());
+		}
+	});
+
+	let linkTypeSelector = dropDownList<PanoramLinkType>({
+		options: [{
+			value: "door",
+			label: "Дверь",
+		}, {
+			value: "stairs",
+			label: "Лестница"
+		}, {
+			value: "step",
+			label: "Шаг"
+		}],
+		value: context.state.selectedLinkType
+	})
 	
 	let removePanoramFromFloorButton = button({
 		text: "-",
@@ -195,6 +218,9 @@ export function getPlanEditFileControls(context: AppContext): HtmlTaggable[] {
 		tag({ class: "button-toolbar" }, [
 			tag({ class: "label medium", text: "Панорамы" }),
 			addPanoramToFloorButton, removePanoramFromFloorButton
+		]),
+		tag({ class: "button-toolbar" }, [
+			toggleLinkModeButton, linkTypeSelector
 		]),
 		panoramTreeList
 	]

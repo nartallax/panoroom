@@ -21,17 +21,12 @@ export class GizmoController extends SkyboxController {
 		this.gizmo = gizmo;
 		this.arrows = arrows;
 		this.watch(this.context.state.selectedSceneObject, v => this.onSelectedObjectUpdate(v))
-		this.watch(this.context.state.isInEditMode, isInEditMode => {
-			if(!isInEditMode){
-				this.clearGizmo();
-			} else {
-				this.onSelectedObjectUpdate(this.context.state.selectedSceneObject());
-			}
-		})
+		this.watch(this.context.state.isInEditMode, () => this.onSelectedObjectUpdate())
+		this.watch(this.context.state.isInLinkMode, () => this.onSelectedObjectUpdate())
 	}
 
-	private onSelectedObjectUpdate(v: null | SelectedSceneObject): void {
-		if(v === null || !this.context.state.isInEditMode()){
+	private onSelectedObjectUpdate(v: null | SelectedSceneObject = this.context.state.selectedSceneObject()): void {
+		if(v === null || !this.context.state.isInEditMode() || this.context.state.isInLinkMode()){
 			this.clearGizmo();
 			return;
 		}
@@ -290,7 +285,7 @@ export class GizmoController extends SkyboxController {
 		}
 	
 		targetObject.on("click", clickEvent => {
-			if(!this.context.state.isInEditMode() || this.isGizmoMovingNow){
+			if(!this.context.state.isInEditMode() || this.context.state.isInLinkMode() || this.isGizmoMovingNow){
 				return;
 			}
 
@@ -329,5 +324,25 @@ export class GizmoController extends SkyboxController {
 			})
 		}
 		return result;
+	}
+
+	protected calcAndSetRotationScaleForLinkLine(a: THREE.Object3D, b: THREE.Object3D, lineMesh: THREE.Object3D): void {
+		let posA = new THREE.Vector3();
+		a.getWorldPosition(posA);
+		let posB = new THREE.Vector3();
+		b.getWorldPosition(posB);
+		lineMesh.position.x = (posA.x + posB.x) / 2;
+		lineMesh.position.y = (posA.y + posB.y) / 2;
+		lineMesh.position.z = (posA.z + posB.z) / 2;
+		lineMesh.scale.y = posA.distanceTo(posB);
+		let dx = a.position.x - b.position.x;
+		let dz = a.position.z - b.position.z;
+		let dy = a.position.y - b.position.y;
+		lineMesh.rotation.order = "XYZ";
+		lineMesh.rotation.z = Math.atan(dx / dy);
+		void dz;
+		console.log({dx, dy, dz});
+		lineMesh.rotation.y = Math.atan(dz / dx);
+		console.log(lineMesh.rotation.z, lineMesh.rotation.y);
 	}
 }
