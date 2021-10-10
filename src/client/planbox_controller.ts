@@ -32,6 +32,8 @@ interface LinkObject {
 	toId: string;
 }
 
+const linkRadius = 0.25;
+
 export class PlanboxController extends GizmoController {
 
 	private keyboardCameraControls: KeyboardCameraControls | null = null;
@@ -39,7 +41,7 @@ export class PlanboxController extends GizmoController {
 	private panorams: {[panoramId: string]: PanoramObject} = {};
 	
 	private linkLineMaterial = new THREE.MeshBasicMaterial({ color: "#FFAE00", side: THREE.FrontSide });
-	private linkLineGeometry = new THREE.CylinderGeometry(0.5, 0.5, 1, 4);
+	private linkLineGeometry = new THREE.CylinderGeometry(linkRadius, linkRadius, 1, 4);
 	private linkSelectStartPanoramId = null as string | null;
 	
 
@@ -464,26 +466,16 @@ export class PlanboxController extends GizmoController {
 	private selectFloor(floorId: string, point?: THREE.Vector3): void {
 		let floorObj = this.floors[floorId]
 
-		let relatedLinks = [] as {a: THREE.Object3D, b: THREE.Object3D, link: THREE.Object3D}[];
-		for(let panoramId in this.panorams){
-			let panoram = this.panorams[panoramId];
-			if(panoram.floorId === floorId){
-				for(let otherPanoramId in panoram.links){
-					relatedLinks.push({
-						a: panoram.mesh, 
-						b: this.panorams[otherPanoramId].mesh, 
-						link: panoram.links[otherPanoramId].mesh
-					})
-				}
-			}
-		}
-
 		this.context.state.selectedSceneObject({
 			type: "floor",
 			floorId: floorId,
 			gizmoPoint: point || floorObj.group.position,
 			object: floorObj.group,
-			links: relatedLinks
+			links: this.getFloorRelatedLinks(floorId).map(linkObj => ({
+				a: this.panorams[linkObj.fromId].mesh,
+				b: this.panorams[linkObj.toId].mesh,
+				link: linkObj.mesh
+			}))
 		});
 	}
 
@@ -494,6 +486,28 @@ export class PlanboxController extends GizmoController {
 
 		let floor = this.floors[this.panorams[panoramId].floorId];
 		return direction === "x"? [-floor.width / 2, floor.width / 2]: [-floor.length / 2, floor.length / 2];
+	}
+
+	private getFloorRelatedLinks(floorId: string): LinkObject[]{
+		let result = [] as LinkObject[];
+		for(let panoramId in this.panorams){
+			let panoramObject = this.panorams[panoramId];
+			if(panoramObject.floorId === floorId){
+				for(let otherPanoramId in panoramObject.links){
+					result.push(panoramObject.links[otherPanoramId]);
+				}
+			}
+		}
+		return result;
+	}
+
+	private forEachLink(handler: (linkObj: LinkObject) => void): void{
+		for(let panoramId in this.panorams){
+			let panoramObject = this.panorams[panoramId];
+			for(let otherPanoramId in panoramObject.links){
+				handler(panoramObject.links[otherPanoramId]);
+			}
+		}
 	}
 
 	// провязка состояния контролов и состояния 3д-сцены
@@ -521,11 +535,21 @@ export class PlanboxController extends GizmoController {
 						group.parent.remove(group);
 					}
 				}
+
+				this.forEachLink(linkObj => {
+					if(linkObj.mesh.parent){
+						linkObj.mesh.parent.remove(linkObj.mesh);
+					}
+				})
+
 				if(floorId){
 					let currentFloorGroup = this.floors[floorId].group;
 					if(!currentFloorGroup.parent){
 						this.scene.add(currentFloorGroup);
 					}
+					this.getFloorRelatedLinks(floorId).forEach(linkObject => {
+						this.scene.add(linkObject.mesh);
+					})
 				}
 			}
 
@@ -592,8 +616,13 @@ export class PlanboxController extends GizmoController {
 		});
 
 		this.watch(this.context.state.hideInactiveFloors, doHide => {
+			let selectedFloorId = this.context.state.selectedFloor();
+			if(!selectedFloorId){
+				return
+			}
+
 			for(let floorId in this.floors){
-				if(floorId === this.context.state.selectedFloor()){
+				if(floorId === selectedFloorId){
 					continue;
 				}
 				let floorObj = this.floors[floorId];
@@ -603,6 +632,22 @@ export class PlanboxController extends GizmoController {
 					floorObj.group.parent.remove(floorObj.group);
 				}
 			}
+
+			let floorRelatedLinks = new Set(this.getFloorRelatedLinks(selectedFloorId));
+			this.forEachLink(linkObject => {
+				if(floorRelatedLinks.has(linkObject)){
+					if(!linkObject.mesh.parent){
+						this.scene.add(linkObject.mesh);
+					}
+				} else {
+					if(doHide && linkObject.mesh.parent){
+						linkObject.mesh.parent.remove(linkObject.mesh);
+					} else if(!doHide && !linkObject.mesh.parent){
+						this.scene.add(linkObject.mesh);
+					}
+				}
+			});
+			
 		});
 
 	}

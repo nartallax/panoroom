@@ -1,4 +1,3 @@
-import {computable} from "boundable/boundable";
 import {AppContext} from "context";
 import {button} from "controls/common/button";
 import {tag} from "utils/dom_utils";
@@ -27,10 +26,12 @@ export class LayoutController {
 		this.options.root.appendChild(tag({class: "view-control-buttons-container"}, [
 			!this.options.canEdit? null: button({ 
 				text: "Редактирование", 
+				active: this.context.state.isInEditMode,
 				onclick: () => this.context.state.isInEditMode(!this.context.state.isInEditMode())
 			}),
 			button({
-				text: computable(() => this.context.state.isPlanActive()? "Панорама": "План"), 
+				text: "План", 
+				active: this.context.state.isPlanActive,
 				onclick: () => this.context.state.isPlanActive(!this.context.state.isPlanActive())
 			})
 		]));
