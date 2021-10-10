@@ -7,7 +7,8 @@ export type SelectedSceneObject = SelectedSceneObjectDescription & {
 	object: THREE.Object3D;
 	gizmoPoint: THREE.Vector3;
 	parent?: THREE.Group;
-	getLimits?: (direction: "x" | "y" | "z") => [number, number] | null
+	getLimits?: (direction: "x" | "y" | "z") => [number, number] | null;
+	links: { a: THREE.Object3D, b: THREE.Object3D, link: THREE.Object3D }[];
 }
 
 

@@ -9,7 +9,7 @@ export const floorYOffset = 1000;
 
 interface FloorObject {
 	group: THREE.Group;
-	object: THREE.Mesh;
+	mesh: THREE.Mesh;
 	geometry: THREE.PlaneGeometry;
 	textureImageId?: string;
 	material: THREE.Material;
@@ -71,7 +71,7 @@ export class PlanboxController extends GizmoController {
 		}
 		for(let floorId in this.floors){
 			let obj = this.floors[floorId];
-			this.scene.remove(obj.object);
+			this.scene.remove(obj.mesh);
 			obj.geometry.dispose();
 		}
 	}
@@ -152,12 +152,12 @@ export class PlanboxController extends GizmoController {
 		// разбираемся с объектом плоскости этажа
 		let obj: THREE.Mesh;
 		if(oldFloorObject){
-			obj = oldFloorObject.object;
+			obj = oldFloorObject.mesh;
 		} else {
 			obj = new THREE.Mesh();
 			obj.name = "floor_" + floorId;
 			group.add(obj);
-			this.addGizmoHandlers(obj, group, {type: "floor", floorId });
+			this.addGizmoHandlers(obj, point => this.selectFloor(floorId, point));
 		}
 		obj.geometry = geometry;
 		obj.material = material;
@@ -165,7 +165,7 @@ export class PlanboxController extends GizmoController {
 		
 		let result = Object.assign(oldFloorObject || {}, { 
 			geometry, 
-			object: obj, 
+			mesh: obj, 
 			group, 
 			material, 
 			textureImageId: textureImageId, 
@@ -176,13 +176,34 @@ export class PlanboxController extends GizmoController {
 	}
 
 	private disposePanoramObject(panoramId: string): void {
-		let panoram = this.panorams[panoramId];
-		panoram.geometry.dispose();
-		panoram.material.dispose();
-		this.textureRepo.unrefTextTexture(panoram.label)
-		if(panoram.mesh.parent){
-			panoram.mesh.parent.remove(panoram.mesh)
+		let panoramObject = this.panorams[panoramId];
+		let panorams = this.context.settings.panorams();
+		let panoram = panorams[panoramId];
+
+		panoramObject.geometry.dispose();
+		panoramObject.material.dispose();
+		this.textureRepo.unrefTextTexture(panoramObject.label)
+		if(panoramObject.mesh.parent){
+			panoramObject.mesh.parent.remove(panoramObject.mesh)
 		}
+
+		delete panoram.position;
+		delete panoram.links;
+		for(let otherPanoramId in panoramObject.links){
+			let mesh = panoramObject.links[otherPanoramId].mesh;
+			if(mesh.parent){
+				mesh.parent.remove(mesh);
+			}
+			delete this.panorams[otherPanoramId].links[panoramId];
+			let otherPanoram = panorams[otherPanoramId];
+			if(otherPanoram.links){
+				otherPanoram.links = otherPanoram.links.filter(x => x.panoramId !== panoramId);
+				if(otherPanoram.links.length === 0){
+					delete otherPanoram.links;
+				}
+			}
+		}
+
 		delete this.panorams[panoramId]; 
 	}
 
@@ -253,10 +274,7 @@ export class PlanboxController extends GizmoController {
 		if(!mesh){
 			mesh = new THREE.Mesh();
 			this.addLinkageHandlers(mesh, panoramId);
-			this.addGizmoHandlers(mesh, mesh, {type: "panoram", panoramId }, 
-				this.floors[floorId].group,
-				dir => this.getPanoramMovementLimits(dir, panoramId)
-			);
+			this.addGizmoHandlers(mesh, point => this.selectPanoram(panoramId, point));
 		}
 		if(!label || !material || !geometry){
 			label = panoram.label;
@@ -295,11 +313,15 @@ export class PlanboxController extends GizmoController {
 		(panoram.links || []).forEach(link => {
 			if(link.panoramId in oldLinkObjects){
 				linkObjects[link.panoramId] = oldLinkObjects[link.panoramId]
+				/* 
+				// можно не пересчитывать, для ускорения обсчета
+				// если мы обновляем позиции линков по мере движения объектов, к которым они привязаны
 				this.calcAndSetRotationScaleForLinkLine(
 					this.panorams[link.panoramId].mesh, 
 					this.panorams[panoramId].mesh,
 					oldLinkObjects[link.panoramId].mesh
 				);
+				*/
 			} else {
 				// проверка - чтобы при загрузке не пытаться создавать линки между объектами раньше объектов
 				// т.е. ничего страшного, если другого объекта нет - когда дойдет очередь до другого объекта, линк будет создан
@@ -406,7 +428,7 @@ export class PlanboxController extends GizmoController {
 
 		for(let panoramId in panorams){
 			let panoram = panorams[panoramId];
-			if(!panoram || !panoram.position){
+			if(!panoram.position){
 				continue;
 			}
 			this.panorams[panoramId] = this.createUpdatePanoramObject(panoram, panoramId, panoram.position.floorId, this.panorams[panoramId]);
@@ -414,23 +436,57 @@ export class PlanboxController extends GizmoController {
 	}
 
 	// assuming there is such panoram
-	private selectPanoram(panoramId: string){
+	private selectPanoram(panoramId: string, point?: THREE.Vector3): void {
 		let selectedObj = this.context.state.selectedSceneObject();
 		if(selectedObj && selectedObj.type === "panoram" && selectedObj.panoramId === panoramId){
 			return;
 		}
-		let {floorId, mesh: object} = this.panorams[panoramId];
+		let {floorId, mesh, links} = this.panorams[panoramId];
 		let floorGroup = this.floors[floorId].group
-		let pos = new THREE.Vector3();
-		object.getWorldPosition(pos);
+		if(!point){
+			point = new THREE.Vector3();
+			mesh.getWorldPosition(point);
+		}
+
+		let relatedLinks = Object.keys(links).map(otherPanoramId => {
+			return { a: mesh, b: this.panorams[otherPanoramId].mesh, link: links[otherPanoramId].mesh };
+		})
+
 		this.context.state.selectedSceneObject({
 			type: "panoram",
-			object: object,
-			gizmoPoint: pos,
+			object: mesh,
+			gizmoPoint: point,
 			panoramId: panoramId,
 			parent: floorGroup,
-			getLimits: dir => this.getPanoramMovementLimits(dir, panoramId)
+			getLimits: dir => this.getPanoramMovementLimits(dir, panoramId),
+			links: relatedLinks
 		})
+	}
+
+	private selectFloor(floorId: string, point?: THREE.Vector3): void {
+		let floorObj = this.floors[floorId]
+
+		let relatedLinks = [] as {a: THREE.Object3D, b: THREE.Object3D, link: THREE.Object3D}[];
+		for(let panoramId in this.panorams){
+			let panoram = this.panorams[panoramId];
+			if(panoram.floorId === floorId){
+				for(let otherPanoramId in panoram.links){
+					relatedLinks.push({
+						a: panoram.mesh, 
+						b: this.panorams[otherPanoramId].mesh, 
+						link: panoram.links[otherPanoramId].mesh
+					})
+				}
+			}
+		}
+
+		this.context.state.selectedSceneObject({
+			type: "floor",
+			floorId: floorId,
+			gizmoPoint: point || floorObj.group.position,
+			object: floorObj.group,
+			links: relatedLinks
+		});
 	}
 
 	private getPanoramMovementLimits(direction: "x" | "y" | "z", panoramId: string): [number, number] | null {
@@ -484,13 +540,7 @@ export class PlanboxController extends GizmoController {
 				return;
 			}
 	
-			let floorObj = this.floors[floorId].group;
-			this.context.state.selectedSceneObject({
-				type: "floor",
-				floorId: floorId,
-				gizmoPoint: floorObj.position,
-				object: floorObj
-			});
+			this.selectFloor(floorId);
 		});
 
 		this.watch(this.context.state.selectedImage, panoramId => {

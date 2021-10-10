@@ -1,4 +1,4 @@
-import {SelectedSceneObject, SelectedSceneObjectDescription} from "app_state";
+import {SelectedSceneObject} from "app_state";
 import {AppContext} from "context";
 import {floorYOffset} from "planbox_controller";
 import {SettingsController} from "settings_controller";
@@ -216,6 +216,11 @@ export class GizmoController extends SkyboxController {
 			
 			movedObject.object.position[direction] = Math.max(minValueLimit, Math.min(maxValueLimit, startObjValue + dVal));
 			this.gizmo.position[direction] = movedObject.object.position[direction] + gizmoOffset
+
+			for(let i = 0; i < movedObject.links.length; i++){
+				let link = movedObject.links[i];
+				this.calcAndSetRotationScaleForLinkLine(link.a, link.b, link.link);
+			}
 		}
 
 		let onMouseMove = (e: MouseEvent) => {
@@ -274,12 +279,7 @@ export class GizmoController extends SkyboxController {
 		}
 	}
 
-	/** 
-	 * @param targetObject объект, на который вешается хендлер на клик
-	 * @param movedObject объект, который будет передвигаться при шевелении гизмо
-	 * @param parent объект, который нужен для того, чтобы учитывать вращение/перемещение
-	*/
-	protected addGizmoHandlers(targetObject: THREE.Object3D, movedObject: THREE.Object3D, description: SelectedSceneObjectDescription, parent?: THREE.Group, getLimits?: (direction: "x" | "y" | "z") => ([number, number] | null)): void {
+	protected addGizmoHandlers(targetObject: THREE.Object3D, onSelect: (point: THREE.Vector3) => void): void {
 		if(!isInteractiveObject(targetObject)){
 			return;
 		}
@@ -296,12 +296,7 @@ export class GizmoController extends SkyboxController {
 				return;
 			}
 
-			this.context.state.selectedSceneObject({
-				...description,
-				gizmoPoint: intersection.point,
-				object: movedObject,
-				parent, getLimits
-			});
+			onSelect(intersection.point);
 			
 		})
 	
@@ -332,17 +327,14 @@ export class GizmoController extends SkyboxController {
 		let posB = new THREE.Vector3();
 		b.getWorldPosition(posB);
 		lineMesh.position.x = (posA.x + posB.x) / 2;
-		lineMesh.position.y = (posA.y + posB.y) / 2;
+		lineMesh.position.y = ((posA.y + posB.y) / 2) - 0.6;
 		lineMesh.position.z = (posA.z + posB.z) / 2;
 		lineMesh.scale.y = posA.distanceTo(posB);
-		let dx = a.position.x - b.position.x;
-		let dz = a.position.z - b.position.z;
-		let dy = a.position.y - b.position.y;
+		let dx = posA.x - posB.x;
+		let dz = posA.z - posB.z;
+		let dy = posA.y - posB.y;
 		lineMesh.rotation.order = "XYZ";
-		lineMesh.rotation.z = Math.atan(dx / dy);
-		void dz;
-		console.log({dx, dy, dz});
-		lineMesh.rotation.y = Math.atan(dz / dx);
-		console.log(lineMesh.rotation.z, lineMesh.rotation.y);
+		lineMesh.rotation.z = Math.atan((Math.sqrt((dx * dx) + (dz * dz)) * (dx >= 0? 1: -1)) / dy);
+		lineMesh.rotation.y = Math.atan(-dz / dx) + Math.PI;
 	}
 }
