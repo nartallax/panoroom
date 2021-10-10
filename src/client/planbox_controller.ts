@@ -355,8 +355,6 @@ export class PlanboxController extends GizmoController {
 
 	private makeLinkObject(fromPanoramMesh: THREE.Object3D, fromPanoramId: string, toPanoramMesh: THREE.Object3D, toPanoramId: string): LinkObject {
 		let mesh = new THREE.Mesh(this.linkLineGeometry, this.linkLineMaterial);
-		mesh.rotation.order = "ZYX";
-		mesh.position.y = 0.1;
 		this.calcAndSetRotationScaleForLinkLine(fromPanoramMesh, toPanoramMesh, mesh);
 		return {
 			fromId: fromPanoramId,
