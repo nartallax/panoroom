@@ -13,6 +13,7 @@ export interface ViewSettings {
 	maxPitch: number;
 	cameraRotationSpeed: number;
 	planLabelScale: number;
+	panoramLabelScale: number;
 }
 
 
@@ -27,12 +28,16 @@ export const defaultViewSettings: ViewSettings = {
 	skyboxWireframe: false,
 	skyboxRadialSegments: 64,
 	cameraRotationSpeed: 1 / 350,
-	planLabelScale: 1 / 20
+	planLabelScale: 1 / 20,
+	panoramLabelScale: 1 / 100
 }
 
 const defaultBuildPlan: BuildingPlan = {
 	panorams: {},
-	floors: {}
+	floors: {},
+	startPanoram: null,
+	startPanoramRotX: null,
+	startPanoramRotY: null
 }
 
 const defaultSettingsPack: ViewSettings & BuildingPlan = {

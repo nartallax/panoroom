@@ -1,48 +1,48 @@
-import {Boundable} from "boundable/boundable";
+import {Boundable, MbBoundable, unwrapBoundable} from "boundable/boundable";
+import {PanoramLink} from "building_plan";
 import {AppContext} from "context";
-import {ControlWatchFn, makeNodeBoundWatcher} from "controls/control";
+import {GizmoController} from "gizmo_controller";
 import {SettingsController} from "settings_controller";
-import {TextureRepository} from "texture_repo";
-import {THREE} from "threejs_decl";
+import {isInteractiveObject, THREE} from "threejs_decl";
 import {addDragListeners} from "utils/drag";
-import {raf} from "utils/graphic_utils";
-import {watchNodeResized} from "utils/watch_node_resized";
-
-interface Skybox {
-	geometry: THREE.CylinderGeometry;
-	texture: THREE.Texture;
-	material: THREE.Material;
-	object: THREE.Object3D;
-}
+import {TextToTextureRenderResult} from "utils/three_text_render";
 
 const defaultSkyboxPath = "./static/default_skybox.png";
 
-export class SkyboxController {
-	protected readonly scene = new THREE.Scene();
-	protected readonly camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 1, 10000);
-	protected readonly renderer = new THREE.WebGLRenderer();
-	protected readonly textureRepo;
-	private readonly skybox: Skybox;
-	private stopRaf: (() => void) | null = null;
-	private stopResizeWatch: (() => void) | null = null;
-	protected watch: ControlWatchFn;
+interface LinkObject {
+	group: THREE.Group;
+	mesh: THREE.Mesh;
+	label: string;
+	scale: number;
+	geometry: THREE.BufferGeometry;
+	material: THREE.Material;
+}
 
-	constructor(private readonly settings: SettingsController, protected readonly context: AppContext){
-		this.textureRepo = new TextureRepository(this.context, {
-			textBgColor: "#444",
-			textFgColor: "#ccc",
-			textHeight: 64,
-			textMargin: 15
-		});
-		this.skybox = this.createSkybox();
-		this.scene.add(this.skybox.object);
+export class SkyboxController extends GizmoController {
+	private currentSkyboxTextureId: string | null = null;
+	private currentSkyboxMaterial: THREE.Material | null = null;
+	private currentSkyboxGeometry: THREE.BufferGeometry | null = null;
+	private currentSkyboxObject: THREE.Mesh | THREE.Line | null = null;
+	private linkObjects = {} as {[panoramId: string]: LinkObject}
+
+	constructor(private readonly settings: SettingsController, context: AppContext, private readonly targetPanoram: MbBoundable<string | null> = null, initialCameraRotation: {x: number, y: number} | null = null){
+		super(context);
+		new THREE.Interaction(this.renderer, this.scene, this.camera);
+		let {object, geometry} = this.createSkybox();
+		this.currentSkyboxObject = object;
+		this.currentSkyboxGeometry = geometry;
+		this.scene.add(object);
 		this.camera.fov = this.settings.fov();
 		this.camera.rotation.order = "ZYX";
 		this.camera.position.set(0, this.settings.cameraHeight() * 1000, 0);
-		this.camera.lookAt(-1, this.settings.cameraHeight() * 1000, 0);
-		this.camera.lookAt(1, this.settings.cameraHeight() * 1000, 0);
 
-		this.watch = makeNodeBoundWatcher(this.canvas);
+		if(initialCameraRotation){
+			this.camera.rotation.x = initialCameraRotation.x;
+			this.camera.rotation.y = initialCameraRotation.y;
+		} else {
+			this.camera.lookAt(1, this.settings.cameraHeight() * 1000, 0);
+		}
+
 		[settings.fov, settings.cameraHeight, settings.minPitch, settings.maxPitch]
 			.forEach(boundable => {
 				this.watch(boundable, () => this.updateCamera());
@@ -50,8 +50,28 @@ export class SkyboxController {
 
 		[settings.skyboxHeight, settings.skyboxRadius, settings.skyboxWireframe, settings.skyboxRadialSegments]
 			.forEach((boundable: Boundable<unknown>) => {
-				this.watch(boundable, () => this.updateSkyboxShape());
+				this.watch(boundable, () => {
+					this.updateSkyboxShape()
+					this.updateLinkObjects()
+				});
 			});
+		
+		this.watch(this.targetPanoram, () => {
+			this.updateSkyboxTexture()
+			// если не удалять кнопки - то иногда случаются странные баги, если сохраняются старые
+			// лучше лишний раз пересоздать
+			for(let panoramId in this.linkObjects){
+				this.deleteLinkObject(this.linkObjects[panoramId]);
+			}
+			this.linkObjects = {};
+			this.updateLinkObjects();
+		});
+
+		[settings.panorams, settings.panoramLabelScale].forEach((boundable: Boundable<unknown>) => {
+			this.watch(boundable, () => {
+				this.updateLinkObjects();
+			});
+		});
 
 		this.setupUserControls();
 	}
@@ -77,60 +97,152 @@ export class SkyboxController {
 		});
 	}
 
-	get canvas(): HTMLCanvasElement {
-		return this.renderer.domElement;
+	private createSkybox(): {object: THREE.Mesh | THREE.Line, geometry: THREE.BufferGeometry} {
+		let {geometry, object} = this.createSkyboxObject();
+		return {object, geometry};
 	}
 
-	private onResize(container: HTMLElement): void {
-		let w = container.clientWidth;
-		let h = container.clientHeight
-		this.renderer.setSize(w, h);
-		this.camera.aspect = w / h;
-		this.camera.updateProjectionMatrix();
+	private createUpdateLinkObject(link: PanoramLink, panoramId: string, linkObject?: LinkObject): void {
+		let label: string | null = null;
+		let texture: TextToTextureRenderResult | null = null;
+		let material: THREE.Material | null = null;
+		let labelFromData = this.settings.panorams()[link.panoramId].label
+		if(linkObject){
+			if(linkObject.label === labelFromData){
+				label = labelFromData;
+				texture = this.textureRepo.textToTexture(linkObject.label, true);
+				material = linkObject.material;
+			} else {
+				this.textureRepo.unrefTextTexture(linkObject.label);
+				linkObject.material.dispose()
+			}
+		}
+		if(!label || !texture || !material){
+			label = labelFromData;
+			texture = this.textureRepo.textToTexture(label)
+			material = new THREE.MeshBasicMaterial({ map: texture.texture, side: THREE.DoubleSide })
+		}
+
+		let geometry: THREE.BufferGeometry | null = null
+		let scale: number | null = null;
+		let scaleFromData = this.context.settings.panoramLabelScale();
+		if(linkObject){
+			if(linkObject.label === labelFromData && linkObject.scale === scaleFromData){
+				scale = scaleFromData;
+				geometry = linkObject.geometry
+			} else {
+				linkObject.geometry.dispose();
+			}
+		}
+		if(!scale || !geometry){
+			scale = scaleFromData;
+			geometry = new THREE.PlaneGeometry(
+				texture.width * this.context.settings.panoramLabelScale() * 1000, 
+				texture.height * this.context.settings.panoramLabelScale() * 1000
+			);
+		}
+
+		let mesh: THREE.Mesh;
+		if(linkObject){
+			mesh = linkObject.mesh;
+		} else {
+			mesh = new THREE.Mesh;
+		}
+		mesh.geometry = geometry;
+		mesh.material = material;
+
+		let group: THREE.Group;
+		if(linkObject){
+			group = linkObject.group;
+		} else {
+			group = new THREE.Group()
+			group.add(mesh);
+
+			if(isInteractiveObject(group)){
+				group.cursor = "pointer";
+				group.on("click", evt => {
+					if(this.context.state.isInEditMode()){
+						if(this.isGizmoMovingNow){
+							return;
+						}
+						this.context.state.selectedSceneObject({
+							type: "link",
+							fromPanoramId: panoramId,
+							toPanoramId: link.panoramId,
+							gizmoPoint: evt.intersects[0].point,
+							object: group,
+							parent: group,
+							getLimits: (dir) => dir !== "y"? null: [0, this.settings.skyboxHeight() * 1000]
+						})
+					} else {
+						this.context.state.currentDisplayedPanoram(link.panoramId);
+					}
+				})
+			}
+
+			this.scene.add(group);
+		}
+
+		let radians = link.x * Math.PI * 2;
+		let distance = this.context.settings.skyboxRadius() * 0.9
+		group.position.x = Math.sin(radians) * distance * 1000;
+		group.position.z = Math.cos(radians) * distance * 1000;
+		group.position.y = link.y * this.context.settings.skyboxHeight() * 1000;
+		group.rotation.y = radians + Math.PI;
+
+		this.linkObjects[link.panoramId] = { geometry, material, group, label, scale, mesh }
 	}
 	
-	start(container: HTMLElement): void {
-		if(this.stopRaf){
-			throw new Error("Already running");
+	private deleteLinkObject(link: LinkObject): void {
+		link.group.parent?.remove(link.group);
+		link.material.dispose();
+		link.geometry.dispose();
+		this.textureRepo.unrefTextTexture(link.label);
+	}
+
+	private updateLinkObjects(): void {
+		const panoramId = unwrapBoundable(this.targetPanoram);
+		let knownLinks = new Set<string>();
+
+		if(panoramId){
+			let panorams = this.context.settings.panorams();
+			let panoram = panorams[panoramId];
+			panoram.links?.forEach(link => {
+				knownLinks.add(link.panoramId)
+				this.createUpdateLinkObject(link, panoramId, this.linkObjects[link.panoramId])
+			});
 		}
-		this.onResize(container);
-		container.appendChild(this.canvas);
-		this.stopRaf = raf(timePassed => {
-			this.renderer.render(this.scene, this.camera);
-			this.onFrame(timePassed);
-		});
-		this.stopResizeWatch = watchNodeResized(container, () => this.onResize(container));
-	}
 
-	stop(): void {
-		if(this.stopRaf){
-			this.stopRaf();
-			this.stopRaf = null;
+		for(let otherPanoramId in this.linkObjects){
+			if(!knownLinks.has(otherPanoramId)){
+				this.deleteLinkObject(this.linkObjects[otherPanoramId])
+				delete this.linkObjects[otherPanoramId]
+			}
 		}
-		if(this.stopResizeWatch){
-			this.stopResizeWatch();
-			this.stopResizeWatch = null;
+
+	}
+
+	private updateSkyboxTexture(): void {
+		if(this.currentSkyboxMaterial){
+			if(this.currentSkyboxTextureId){
+				this.textureRepo.unrefTextureByImageId(this.currentSkyboxTextureId)
+			} else {
+				this.textureRepo.unrefTextureByPath(defaultSkyboxPath)
+			}
+			this.currentSkyboxMaterial.dispose();
 		}
-		this.canvas.remove();
-	}
 
-	protected onFrame(timePassed: number): void {
-		// nothing. to be overriden
-		void timePassed
-	}
-
-	get isActive(): boolean {
-		return !!this.stopRaf;
-	}
-
-	private createSkybox(): Skybox {
-		let texture = this.textureRepo.pathToTexture(defaultSkyboxPath)
-		let material = new THREE.MeshBasicMaterial({ map: texture, side: THREE.BackSide });
-		let {geometry, object: mesh} = this.createSkyboxObject(material);
-		return {texture, material, object: mesh, geometry};
+		this.currentSkyboxTextureId = unwrapBoundable(this.targetPanoram);
+		let texture = this.currentSkyboxTextureId
+			? this.textureRepo.imageIdToTexture(this.currentSkyboxTextureId)
+			: this.textureRepo.pathToTexture(defaultSkyboxPath);
+		this.currentSkyboxMaterial = new THREE.MeshBasicMaterial({ map: texture, side: THREE.BackSide });
+		if(this.currentSkyboxObject){
+			this.currentSkyboxObject.material = this.currentSkyboxMaterial;
+		}
 	}
 	
-	protected createSkyboxObject(material: THREE.Material): {geometry: THREE.CylinderGeometry, object: THREE.Object3D} {
+	protected createSkyboxObject(): {geometry: THREE.BufferGeometry, object: THREE.Mesh | THREE.Line} {
 		let geometry = new THREE.CylinderGeometry(
 			this.settings.skyboxRadius() * 1000, 
 			this.settings.skyboxRadius() * 1000, 
@@ -138,15 +250,28 @@ export class SkyboxController {
 			this.settings.skyboxRadialSegments()
 		);
 		patchCylinderUV(geometry);
-		let object: THREE.Object3D;
+		let object: THREE.Mesh | THREE.Line;
 		if(this.settings.skyboxWireframe()){
-			object = new THREE.Line(geometry, material);
+			object = new THREE.Line(geometry);
 		} else {
-			object = new THREE.Mesh(geometry, material);
+			object = new THREE.Mesh(geometry);
 		}
 		object.name = "skybox";
+		if(this.currentSkyboxMaterial){
+			object.material = this.currentSkyboxMaterial;
+		}
 		
 		object.position.y = (this.settings.skyboxHeight() / 2) * 1000;
+
+		if(isInteractiveObject(object)){
+			object.on("click", () => {
+				if(!this.isGizmoMovingNow){
+					this.context.state.selectedSceneObject(null);
+					this.clearGizmo();
+				}
+			})
+		}
+
 		return {geometry, object}
 	}
 
@@ -161,12 +286,17 @@ export class SkyboxController {
 	}
 
 	private updateSkyboxShape(): void {
-		let {geometry, object} = this.createSkyboxObject(this.skybox.material);
+		let {geometry, object} = this.createSkyboxObject();
 		this.scene.add(object);
-		this.scene.remove(this.skybox.object);
-		this.skybox.geometry.dispose();
-		this.skybox.object = object;
-		this.skybox.geometry = geometry;
+		if(this.currentSkyboxObject){
+			this.scene.remove(this.currentSkyboxObject);
+		}
+		if(this.currentSkyboxGeometry){
+			this.currentSkyboxGeometry.dispose();
+		}
+		
+		this.currentSkyboxObject = object;
+		this.currentSkyboxGeometry = geometry;
 	}
 
 	protected updateCamera(): void {

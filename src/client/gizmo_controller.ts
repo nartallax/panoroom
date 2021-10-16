@@ -1,22 +1,21 @@
 import {SelectedSceneObject} from "app_state";
 import {AppContext} from "context";
 import {floorYOffset} from "planbox_controller";
-import {SettingsController} from "settings_controller";
-import {SkyboxController} from "skybox_controller";
+import {SceneController} from "scene_controller";
 import {isInteractiveObject, InteractionLib, THREE} from "threejs_decl";
 import {movePositionToLocal} from "utils/three_global_pos_to_local";
 
 const gizmoDistanceScaleMultiplier = 1/75;
 
-export class GizmoController extends SkyboxController {
+export class GizmoController extends SceneController {
 	private gizmo: THREE.Group;
 	private arrows: Record<"x" | "y" | "z", THREE.Object3D>
 	private corners: Record<"x" | "y" | "z", THREE.Object3D>
 
 	protected isGizmoMovingNow = false;
 
-	constructor(settings: SettingsController, context: AppContext){
-		super(settings, context);
+	constructor(context: AppContext){
+		super(context);
 
 		let {gizmo, arrows, corners} = this.makeGizmo();
 		this.gizmo = gizmo;
@@ -47,17 +46,32 @@ export class GizmoController extends SkyboxController {
 			this.scene.add(this.gizmo);
 		}
 
+		if(v.type === "link"){
+			this.gizmo.position.z += 10;
+		}
+
+		let directions = ["x", "y", "z"] as ("x" | "y" | "z")[];
+		directions.forEach(dir => {
+			this.arrows[dir].parent?.remove(this.arrows[dir]);
+			this.corners[dir].parent?.remove(this.corners[dir]);
+		});
 		switch(v.type){
 			case "floor":
-				if(!this.arrows.y.parent){ this.gizmo.add(this.arrows.y) }
-				if(!this.corners.x.parent){ this.gizmo.add(this.corners.x) }
-				if(!this.corners.z.parent){ this.gizmo.add(this.corners.z) }
+				directions.forEach(dir => {
+					this.gizmo.add(this.arrows[dir], this.corners[dir]);
+				});
 				break;
 			case "panoram":
-				if(this.arrows.y.parent){ this.gizmo.remove(this.arrows.y) }
-				if(this.corners.x.parent){ this.gizmo.remove(this.corners.x) }
-				if(this.corners.z.parent){ this.gizmo.remove(this.corners.z) }
+				this.gizmo.add(this.arrows.x);
+				this.gizmo.add(this.arrows.z)
+				this.gizmo.add(this.corners.y);
 				break;
+			case "link":
+				this.gizmo.add(this.arrows.x);
+				this.gizmo.add(this.arrows.y)
+				this.gizmo.add(this.corners.z);
+				break;
+
 		}
 	}
 
@@ -191,6 +205,7 @@ export class GizmoController extends SkyboxController {
 		this.isGizmoMovingNow = true;
 		let distanceToIntersection = firstIntersect.distance;
 		
+		let isRadialMovement = movedObject.type === "link";
 		let parent = this.context.state.selectedSceneObject()?.parent;
 		let camCosX = Math.cos(this.camera.rotation.x - (parent?.rotation?.x ?? 0));
 		let camCosY = Math.cos(this.camera.rotation.y - (parent?.rotation?.y ?? 0));
@@ -203,8 +218,13 @@ export class GizmoController extends SkyboxController {
 		let yMult = directions.find(dir => dir === "y")? 0: 1;
 
 		let makeOnmoveHandler = (direction: "x" | "y" | "z"): ((x: number, y: number) => void) => {
-			let startObjValue = movedObject.object.position[direction];
-			let gizmoOffset = this.gizmo.position[direction] - startObjValue;
+			let usingRadialFormula = isRadialMovement && direction === "x"
+			let startObjValue = usingRadialFormula
+				? Math.atan(movedObject.object.position.x / movedObject.object.position.z)
+				: movedObject.object.position[direction];
+			let gizmoOffset = usingRadialFormula
+				? Math.atan(this.gizmo.position.x / this.gizmo.position.z) - startObjValue
+				: this.gizmo.position[direction] - startObjValue;
 
 			let minValueLimit = Number.MIN_SAFE_INTEGER;
 			let maxValueLimit = Number.MAX_SAFE_INTEGER;
@@ -215,40 +235,71 @@ export class GizmoController extends SkyboxController {
 				}
 			}
 
-			return (x: number, y: number) => {
-				let dx = startX - x;
-				let dy = startY - y;
-				let dVal: number;
-				switch(direction){
-					case "y": {
-						// в этих формулах еще не на 100% все точно, немного разъезжается курсор и объект
-						// можно дошаманить, но мне влом, в целом работает
-						// основная идея в том, что у нас есть дистанция, которую курсор прошел по экрану, в пикселях
-						// мы её конвертируем в угол, где начало движения (после проекции) - это 0 градусов, а край экрана - это fov градусов
-						// а потом с помощью этого угла и расстояния до точки касания считаем, какую инворлд длину прошел объект
-						let dPx = (dy * camCosX)
-						let dAngle = (vFOV * (dPx / screenHeight))
-						dVal = distanceToIntersection * Math.tan(dAngle);
-						break;
-					} case "x": {
-						let dPx = (-dx * camCosY) + (-dy * camSinY * yMult);
-						let dAngle = hFOV * (dPx / screenWidth);
-						dVal = distanceToIntersection * Math.tan(dAngle);
-						break;
-					} case "z": {
-						let dPx = (dx * camSinY) + (-dy * camCosY * yMult);
-						let dAngle = hFOV * (dPx / screenWidth);
-						dVal = distanceToIntersection * Math.tan(dAngle);
-					} break;
+			if(usingRadialFormula){
+				if(movedObject.object.position.z < 0){
+					startObjValue += Math.PI;
 				}
-				
-				movedObject.object.position[direction] = Math.max(minValueLimit, Math.min(maxValueLimit, startObjValue + dVal));
-				this.gizmo.position[direction] = movedObject.object.position[direction] + gizmoOffset
+				let startingRotation = movedObject.object.rotation.y;
+				let objX = movedObject.object.position.x;
+				let objZ = movedObject.object.position.z;
+				let objRadialDistance = Math.sqrt((objX * objX) + (objZ * objZ));
+				let gizX = this.gizmo.position.x;
+				let gizZ = this.gizmo.position.z;
+				let gizmoRadialDistance = Math.sqrt((gizX * gizX) + (gizZ * gizZ));
+				return (x, y) => {
+					void y; // его мы использовать не будем, пожалуй
+					let dAngle = hFOV * (startX - x) / screenWidth;
+					movedObject.object.position.x = objRadialDistance * Math.sin(startObjValue + dAngle);
+					movedObject.object.position.z = objRadialDistance * Math.cos(startObjValue + dAngle);
+					movedObject.object.rotation.y = startingRotation + dAngle
+					if(movedObject.object !== movedObject.parent){
+						// тут возможно есть ошибка, код на самом деле не используется
+						this.gizmo.position.x = gizmoRadialDistance * Math.sin(startObjValue + gizmoOffset + dAngle)
+						this.gizmo.position.y = gizmoRadialDistance * Math.sin(startObjValue + gizmoOffset + dAngle)
+					}
+				}
+			} else {
 
-				for(let i = 0; i < movedObject.links.length; i++){
-					let link = movedObject.links[i];
-					this.calcAndSetRotationScaleForLinkLine(link.a, link.b, link.link);
+				return (x, y) => {
+					let dx = startX - x;
+					let dy = startY - y;
+					let dVal: number;
+					switch(direction){
+						case "y": {
+							// в этих формулах еще не на 100% все точно, немного разъезжается курсор и объект
+							// можно дошаманить, но мне влом, в целом работает
+							// основная идея в том, что у нас есть дистанция, которую курсор прошел по экрану, в пикселях
+							// мы её конвертируем в угол, где начало движения (после проекции) - это 0 градусов, а край экрана - это fov градусов
+							// а потом с помощью этого угла и расстояния до точки касания считаем, какую инворлд длину прошел объект
+							let dPx = (dy * camCosX)
+							let dAngle = (vFOV * (dPx / screenHeight))
+							dVal = distanceToIntersection * Math.tan(dAngle);
+							break;
+						} case "x": {
+							let dPx = (-dx * camCosY) + (-dy * camSinY * yMult);
+							let dAngle = hFOV * (dPx / screenWidth);
+							dVal = distanceToIntersection * Math.tan(dAngle);
+							break;
+						} case "z": {
+							let dPx = (dx * camSinY) + (-dy * camCosY * yMult);
+							let dAngle = hFOV * (dPx / screenWidth);
+							dVal = distanceToIntersection * Math.tan(dAngle);
+						} break;
+					}
+					
+					movedObject.object.position[direction] = Math.max(minValueLimit, Math.min(maxValueLimit, startObjValue + dVal));
+					if(movedObject.object !== movedObject.parent){
+						this.gizmo.position[direction] = movedObject.object.position[direction] + gizmoOffset
+					}
+	
+					if(movedObject.links){
+						for(let i = 0; i < movedObject.links.length; i++){
+							let link = movedObject.links[i];
+							this.calcAndSetRotationScaleForLinkLine(link.a, link.b, link.link);
+						}
+					}
 				}
+
 			}
 		}
 
@@ -290,7 +341,7 @@ export class GizmoController extends SkyboxController {
 			this.isGizmoMovingNow = false;
 		}, 25);
 
-		let obj = this.context.state.selectedSceneObject();
+		const obj = this.context.state.selectedSceneObject();
 		if(obj){
 			obj.gizmoPoint = this.gizmo.position;
 			switch(obj.type){
@@ -309,6 +360,22 @@ export class GizmoController extends SkyboxController {
 						panoram.position.z = obj.object.position.z;
 					}
 					this.context.settings.panorams.notify();
+					break;
+				}
+				case "link": {
+					let panoram = this.context.settings.panorams()[obj.fromPanoramId]
+					let link = panoram.links?.find(link => link.panoramId === obj.toPanoramId);
+					if(link){
+						let x = obj.object.position.x
+						let z = obj.object.position.z
+						let radians = Math.atan(x / z);
+						if(z < 0){
+							radians += Math.PI;
+						}
+						link.x = radians / (Math.PI * 2);
+						link.y = (obj.object.position.y / 1000) / this.context.settings.skyboxHeight()
+						this.context.settings.panorams.notify();
+					}
 					break;
 				}
 			}
@@ -344,26 +411,13 @@ export class GizmoController extends SkyboxController {
 		}
 	}
 
-	protected createSkyboxObject(material: THREE.Material): {geometry: THREE.CylinderGeometry, object: THREE.Object3D} {
-		let result = super.createSkyboxObject(material);
-		if(isInteractiveObject(result.object)){
-			result.object.on("click", () => {
-				if(!this.isGizmoMovingNow){
-					this.context.state.selectedSceneObject(null);
-					this.clearGizmo();
-				}
-			})
-		}
-		return result;
-	}
-
 	protected calcAndSetRotationScaleForLinkLine(a: THREE.Object3D, b: THREE.Object3D, lineMesh: THREE.Object3D): void {
 		let posA = new THREE.Vector3();
 		a.getWorldPosition(posA);
 		let posB = new THREE.Vector3();
 		b.getWorldPosition(posB);
 		lineMesh.position.x = (posA.x + posB.x) / 2;
-		lineMesh.position.y = ((posA.y + posB.y) / 2) - 0.6;
+		lineMesh.position.y = ((posA.y + posB.y) / 2) - 0.35;
 		lineMesh.position.z = (posA.z + posB.z) / 2;
 		lineMesh.scale.y = posA.distanceTo(posB);
 		let dx = posA.x - posB.x;

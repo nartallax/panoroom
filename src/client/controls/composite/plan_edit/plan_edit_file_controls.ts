@@ -202,6 +202,24 @@ export function getPlanEditFileControls(context: AppContext): HtmlTaggable[] {
 		}
 	});
 
+	let goIntoPanoramButton = button({
+		text: "В панораму",
+		disabled: computable(() => {
+			let panoramId = context.state.selectedImage();
+			return !panoramId || !context.settings.panorams()[panoramId].position
+		}),
+		onclick: () => {
+			let panoramId = context.state.selectedImage();
+			if(panoramId){
+				let panoram = context.settings.panorams()[panoramId];
+				if(panoram.position){
+					context.state.currentDisplayedPanoram(panoramId);
+					context.state.isPlanActive(false);
+				}
+			}
+		}
+	})
+
 	let planLabelScaleInput = slider({
 		label: "Масштаб текста на плане",
 		value: context.settings.planLabelScale,
@@ -217,7 +235,7 @@ export function getPlanEditFileControls(context: AppContext): HtmlTaggable[] {
 		planLabelScaleInput,
 		tag({ class: "button-toolbar" }, [
 			tag({ class: "label medium", text: "Панорамы" }),
-			addPanoramToFloorButton, removePanoramFromFloorButton
+			addPanoramToFloorButton, removePanoramFromFloorButton, goIntoPanoramButton
 		]),
 		tag({ class: "button-toolbar" }, [
 			toggleLinkModeButton, linkTypeSelector

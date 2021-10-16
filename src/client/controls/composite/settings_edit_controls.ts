@@ -12,6 +12,16 @@ export function getSettingsEditControls(context: AppContext): HTMLElement {
 		text: "Грани", 
 		onclick: () => context.settings.skyboxWireframe(!context.settings.skyboxWireframe())
 	});	
+
+	let setDefaultPanoramButton = button({
+		text: "Сделать начальной",
+		active: computable(() => context.settings.startPanoram() === context.state.currentDisplayedPanoram()),
+		onclick: () => {
+			context.settings.startPanoram(context.state.currentDisplayedPanoram());
+			context.settings.startPanoramRotX(context.skybox.camera.rotation.x);
+			context.settings.startPanoramRotY(context.skybox.camera.rotation.y);
+		}
+	})
 	
 	return panel({ 
 		class: "settings-edit-controls-container",
@@ -20,6 +30,9 @@ export function getSettingsEditControls(context: AppContext): HTMLElement {
 		tag({class: "button-toolbar"}, [
 			tag({class: "label big", text: "Настройки"}),
 			getSaveButton(context)
+		]),
+		tag({class: "button-toolbar"}, [
+			setDefaultPanoramButton
 		]),
 		collapser({text: "Просмотрщик"}, [
 			tag({class: "button-toolbar"}, [
@@ -57,6 +70,10 @@ export function getSettingsEditControls(context: AppContext): HTMLElement {
 			slider({
 				label: "Скорость поворота",
 				min: 1/2000, value: context.settings.cameraRotationSpeed, max: 1/100
+			}),
+			slider({
+				label: "Размер текста (панорамы)",
+				min: 0.001 / 5, value: context.settings.panoramLabelScale, max: 0.001 * 2
 			})
 		])
 	])

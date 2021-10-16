@@ -54,7 +54,7 @@ export class TextureRepository {
 		}
 	}
 
-	textToTexture(text: string): TextToTextureRenderResult {
+	textToTexture(text: string, skipReferenceIncrement = false): TextToTextureRenderResult {
 		if(!this.textTextures[text]){
 			this.textTextures[text] = {
 				rendered: renderTextToTexture(text, 
@@ -67,7 +67,9 @@ export class TextureRepository {
 				refCount: 1
 			}
 		} else {
-			this.textTextures[text].refCount++;
+			if(!skipReferenceIncrement){
+				this.textTextures[text].refCount++;
+			}
 		}
 		return this.textTextures[text].rendered;
 	}

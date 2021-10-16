@@ -3,7 +3,7 @@ import {AppContext} from "context";
 import {KeyboardCameraControls, setupKeyboardCameraMovement} from "keyboard_camera_movement";
 import {isInteractiveObject, THREE} from "threejs_decl";
 import {defaultViewSettings} from "settings_controller";
-import {GizmoController} from "gizmo_controller";
+import {SkyboxController} from "skybox_controller";
 
 export const floorYOffset = 1000;
 
@@ -34,7 +34,7 @@ interface LinkObject {
 
 const linkRadius = 0.25;
 
-export class PlanboxController extends GizmoController {
+export class PlanboxController extends SkyboxController {
 
 	private keyboardCameraControls: KeyboardCameraControls | null = null;
 	private floors: {[floorId: string]: FloorObject} = {};
@@ -288,7 +288,7 @@ export class PlanboxController extends GizmoController {
 		mesh.rotation.x = -Math.PI / 2;
 		mesh.position.x = panoram.position.x;
 		mesh.position.z = panoram.position.z;
-		mesh.position.y = 0.75;
+		mesh.position.y = 0.35;
 
 		let resultFloorId: string | null = null;
 		if(oldPanoramObject){
@@ -401,15 +401,15 @@ export class PlanboxController extends GizmoController {
 				toLinks.push({
 					panoramId: fromId,
 					type: this.context.state.selectedLinkType(),
-					x: Math.random() * Math.PI * 2, // eh
-					y: 1
+					x: Math.random(),
+					y: 0.5
 				})
 
 				fromLinks.push({
 					panoramId: toId,
 					type: this.context.state.selectedLinkType(),
-					x: Math.random() * Math.PI * 2,
-					y: 1
+					x: Math.random(),
+					y: 0.5
 				});
 			}
 

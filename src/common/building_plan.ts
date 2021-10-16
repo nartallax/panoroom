@@ -3,12 +3,14 @@ export interface Panoram {
 	filename: string;
 	label: string;
 	position?: FloorPosition;
-	links?: {
-		type: PanoramLinkType;
-		panoramId: string;
-		x: number;
-		y: number;
-	}[];
+	links?: PanoramLink[];
+}
+
+export interface PanoramLink {
+	type: PanoramLinkType;
+	panoramId: string;
+	x: number;
+	y: number;
 }
 
 export interface FloorPosition {
@@ -36,4 +38,7 @@ export interface BuildingFloor {
 export interface BuildingPlan {
 	panorams: {[panoramId: string]: Panoram};
 	floors: {[floorId: string]: BuildingFloor};
+	startPanoram: string | null;
+	startPanoramRotX: number | null;
+	startPanoramRotY: number | null;
 }
