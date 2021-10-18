@@ -21,17 +21,21 @@ interface LinkObject {
 export class SkyboxController extends GizmoController {
 	private currentSkyboxTextureId: string | null = null;
 	private currentSkyboxMaterial: THREE.Material | null = null;
-	private currentSkyboxGeometry: THREE.BufferGeometry | null = null;
-	private currentSkyboxObject: THREE.Mesh | THREE.Line | null = null;
+	private currentSkyboxGeometry: THREE.BufferGeometry;
+	private currentSkyboxObject: THREE.Mesh | THREE.Line;
+	private skyboxGroup: THREE.Group;
 	private linkObjects = {} as {[panoramId: string]: LinkObject}
 
-	constructor(private readonly settings: SettingsController, context: AppContext, private readonly targetPanoram: MbBoundable<string | null> = null, initialCameraRotation: {x: number, y: number} | null = null){
+	constructor(private readonly settings: SettingsController, context: AppContext, readonly targetPanoram: MbBoundable<string | null> = null, initialCameraRotation: {x: number, y: number} | null = null){
 		super(context);
 		new THREE.Interaction(this.renderer, this.scene, this.camera);
 		let {object, geometry} = this.createSkybox();
+		this.skyboxGroup = new THREE.Group();
+		this.skyboxGroup.name = "skybox_group";
 		this.currentSkyboxObject = object;
 		this.currentSkyboxGeometry = geometry;
-		this.scene.add(object);
+		this.skyboxGroup.add(object);
+		this.scene.add(this.skyboxGroup);
 		this.camera.fov = this.settings.fov();
 		this.camera.rotation.order = "ZYX";
 		this.camera.position.set(0, this.settings.cameraHeight() * 1000, 0);
@@ -70,8 +74,24 @@ export class SkyboxController extends GizmoController {
 		[settings.panorams, settings.panoramLabelScale].forEach((boundable: Boundable<unknown>) => {
 			this.watch(boundable, () => {
 				this.updateLinkObjects();
+				this.updatePanoramRotation();
 			});
 		});
+
+		let compass = this.makeArrow("x");
+		compass.position.x = 0;
+		compass.position.y = 0
+		compass.position.z = 0;
+		compass.scale.x = compass.scale.y = compass.scale.z = 100;
+		this.watch(context.state.isInEditMode, isEditing => {
+			if(isEditing && this.shouldShowCompassOnEdit()){
+				if(!compass.parent){
+					this.scene.add(compass);
+				}
+			} else {
+				compass.parent?.remove(compass);
+			}
+		})
 
 		this.setupUserControls();
 	}
@@ -156,6 +176,7 @@ export class SkyboxController extends GizmoController {
 			group = linkObject.group;
 		} else {
 			group = new THREE.Group()
+			group.name = "link_to_" + link.panoramId + "_group"
 			group.add(mesh);
 
 			if(isInteractiveObject(group)){
@@ -180,7 +201,7 @@ export class SkyboxController extends GizmoController {
 				})
 			}
 
-			this.scene.add(group);
+			this.skyboxGroup.add(group);
 		}
 
 		let radians = link.x * Math.PI * 2;
@@ -287,9 +308,9 @@ export class SkyboxController extends GizmoController {
 
 	private updateSkyboxShape(): void {
 		let {geometry, object} = this.createSkyboxObject();
-		this.scene.add(object);
+		this.skyboxGroup.add(object);
 		if(this.currentSkyboxObject){
-			this.scene.remove(this.currentSkyboxObject);
+			this.currentSkyboxObject.parent?.remove(this.currentSkyboxObject);
 		}
 		if(this.currentSkyboxGeometry){
 			this.currentSkyboxGeometry.dispose();
@@ -304,6 +325,24 @@ export class SkyboxController extends GizmoController {
 		this.camera.position.y = this.settings.cameraHeight() * 1000;
 		this.camera.rotation.x = this.clampPitch(this.camera.rotation.x)
 		this.camera.updateProjectionMatrix();
+	}
+
+	protected shouldShowCompassOnEdit(): boolean {
+		return true;
+	}
+
+	private updatePanoramRotation(): void {
+		let panoramId = unwrapBoundable(this.targetPanoram);
+		if(!panoramId){
+			return
+		}
+
+		let panoram = this.context.settings.panorams()[panoramId]
+		if(!panoram.position){
+			return;
+		}
+
+		this.skyboxGroup.rotation.y = panoram.position.rotation;
 	}
 
 }

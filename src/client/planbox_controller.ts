@@ -240,6 +240,12 @@ export class PlanboxController extends SkyboxController {
 				this.floors[floorId] = obj;
 			}
 		}
+
+		this.forEachLink(linkObj => this.calcAndSetRotationScaleForLinkLine(
+			this.panorams[linkObj.fromId].mesh,
+			this.panorams[linkObj.toId].mesh,
+			linkObj.mesh
+		));
 	}
 
 	private makePanoramMaterialGeometry(text: string): {material: THREE.Material, geometry: THREE.BufferGeometry} {
@@ -650,6 +656,10 @@ export class PlanboxController extends SkyboxController {
 			
 		});
 
+	}
+
+	protected shouldShowCompassOnEdit(): boolean {
+		return false;
 	}
 
 }

@@ -7,10 +7,19 @@ import {movePositionToLocal} from "utils/three_global_pos_to_local";
 
 const gizmoDistanceScaleMultiplier = 1/75;
 
+const arrowHeight = 10;
+const arrowWidth = arrowHeight / 5;
+const shaftRadius = arrowWidth / 3;
+const peakHeight = arrowHeight / 5;
+const cornerSize = arrowHeight / 3
+
 export class GizmoController extends SceneController {
 	private gizmo: THREE.Group;
 	private arrows: Record<"x" | "y" | "z", THREE.Object3D>
 	private corners: Record<"x" | "y" | "z", THREE.Object3D>
+	private shaftGeom = new THREE.CylinderGeometry(shaftRadius, shaftRadius, arrowHeight - peakHeight, 6);
+	private peakGeom = new THREE.ConeGeometry(arrowWidth / 2, peakHeight, 6);
+	private cornerGeom = new THREE.PlaneGeometry(cornerSize, cornerSize);
 
 	protected isGizmoMovingNow = false;
 
@@ -75,47 +84,45 @@ export class GizmoController extends SceneController {
 		}
 	}
 
+	protected makeArrow(direction: "x" | "y" | "z"): THREE.Group {
+		let material = new THREE.MeshBasicMaterial({
+			color: direction === "x"? "#f00": direction === "y"? "#00f": "#0f0",
+			side: THREE.FrontSide
+		});
+		let result = new THREE.Group();
+
+		let shaft = new THREE.Mesh(this.shaftGeom, material);
+		shaft.name = "shaft_" + direction
+		shaft.position.y = (arrowHeight - peakHeight) / 2;
+		result.add(shaft);
+
+		let peak = new THREE.Mesh(this.peakGeom, material);
+		peak.name = "peak_" + direction;
+		peak.position.y = arrowHeight - (peakHeight / 2);
+		result.add(peak);
+		
+		switch(direction){
+			case "x":
+				result.rotation.z = -Math.PI / 2;
+				break;
+			case "z":
+				result.rotation.x = Math.PI / 2;
+				break;
+		}
+
+		return result;
+	}
+
 	private makeGizmo(): {gizmo: THREE.Group, arrows: Record<"x" | "y" | "z", THREE.Object3D>, corners: Record<"x" | "y" | "z", THREE.Object3D>} {
-		let arrowHeight = 10;
-		let arrowWidth = arrowHeight / 5;
-		let shaftRadius = arrowWidth / 3;
-		let peakHeight = arrowHeight / 5;
 		let arrows = {} as Record<"x" | "y" | "z", THREE.Object3D>
 		let corners = {} as Record<"x" | "y" | "z", THREE.Object3D>
 
 
 		// можно не сохранять. одинфиг диспозить не придется
-		let shaftGeom = new THREE.CylinderGeometry(shaftRadius, shaftRadius, arrowHeight - peakHeight, 6);
-		let peakGeom = new THREE.ConeGeometry(arrowWidth / 2, peakHeight, 6);
 		let gizmo = new THREE.Group();
-		let cornerSize = arrowHeight / 3
-		let cornerGeom = new THREE.PlaneGeometry(cornerSize, cornerSize);
 
 		let makeArrow = (direction: "x" | "y" | "z") => {
-			let material = new THREE.MeshBasicMaterial({
-				color: direction === "x"? "#f00": direction === "y"? "#00f": "#0f0",
-				side: THREE.FrontSide
-			});
-			let result = new THREE.Group();
-
-			let shaft = new THREE.Mesh(shaftGeom, material);
-			shaft.name = "shaft_" + direction
-			shaft.position.y = (arrowHeight - peakHeight) / 2;
-			result.add(shaft);
-
-			let peak = new THREE.Mesh(peakGeom, material);
-			peak.name = "peak_" + direction;
-			peak.position.y = arrowHeight - (peakHeight / 2);
-			result.add(peak);
-			
-			switch(direction){
-				case "x":
-					result.rotation.z = -Math.PI / 2;
-					break;
-				case "z":
-					result.rotation.x = Math.PI / 2;
-					break;
-			}
+			let result = this.makeArrow(direction);
 
 			arrows[direction] = result;
 			gizmo.add(result);
@@ -131,7 +138,7 @@ export class GizmoController extends SceneController {
 				side: THREE.DoubleSide
 			})
 
-			let result = new THREE.Mesh(cornerGeom, material);
+			let result = new THREE.Mesh(this.cornerGeom, material);
 			result.name = "corner_" + direction;
 			let moveDirs: ("x" | "y" | "z")[];
 

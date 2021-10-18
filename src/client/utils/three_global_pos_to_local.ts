@@ -1,5 +1,8 @@
 // изменить глобальный position так, чтобы он стал локальным относительно parent
 export function movePositionToLocal(position: THREE.Vector3, parent: THREE.Object3D): void{
+	if(parent.parent){
+		movePositionToLocal(position, parent.parent);
+	}
 	position.x -= parent.position.x;
 	position.y -= parent.position.y;
 	position.z -= parent.position.z;
