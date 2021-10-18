@@ -33,7 +33,7 @@ export async function main(): Promise<void> {
 			}
 		}
 	}
-	context.skybox = new SkyboxController(context.settings, context, context.state.currentDisplayedPanoram, initialRotation);
+	context.skybox = new SkyboxController(context.settings, context, context.state.currentDisplayedPanoram, initialRotation, context.state.skyboxFreelook);
 	context.layout = new LayoutController(context, {canEdit, root: document.body});
 
 	context.layout.start();

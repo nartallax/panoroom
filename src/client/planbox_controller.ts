@@ -1,6 +1,5 @@
 import {BuildingFloor, Panoram} from "building_plan";
 import {AppContext} from "context";
-import {KeyboardCameraControls, setupKeyboardCameraMovement} from "keyboard_camera_movement";
 import {isInteractiveObject, THREE} from "threejs_decl";
 import {defaultViewSettings} from "settings_controller";
 import {SkyboxController} from "skybox_controller";
@@ -36,7 +35,6 @@ const linkRadius = 0.25;
 
 export class PlanboxController extends SkyboxController {
 
-	private keyboardCameraControls: KeyboardCameraControls | null = null;
 	private floors: {[floorId: string]: FloorObject} = {};
 	private panorams: {[panoramId: string]: PanoramObject} = {};
 	
@@ -51,7 +49,7 @@ export class PlanboxController extends SkyboxController {
 			fov: context.settings.fov(),
 			skyboxHeight: 2,
 			skyboxRadialSegments: 4
-		}), context);
+		}), context, null, null, true);
 
 		new THREE.Interaction(this.renderer, this.scene, this.camera);
 
@@ -67,10 +65,6 @@ export class PlanboxController extends SkyboxController {
 
 	stop(): void {
 		super.stop();
-		if(this.keyboardCameraControls){
-			this.keyboardCameraControls.clear();
-			this.keyboardCameraControls = null;
-		}
 		for(let floorId in this.floors){
 			let obj = this.floors[floorId];
 			this.scene.remove(obj.mesh);
@@ -80,18 +74,10 @@ export class PlanboxController extends SkyboxController {
 
 	start(el: HTMLElement): void {
 		super.start(el);
-		this.keyboardCameraControls = setupKeyboardCameraMovement(this.camera, 0.05)
 	}
 
-	protected onFrame(timePassed: number): void {
-		super.onFrame(timePassed);
-		if(this.keyboardCameraControls){
-			this.keyboardCameraControls.onFrame(timePassed);
-		}
-	}
-
-	protected updateCamera(): void {
-		// ничего. не надо трогать камеру здесь
+	protected getKeyboardCameraMovingSpeed(): number {
+		return 0.05;
 	}
 
 	private createUpdateFloorObject(floor: BuildingFloor, floorId: string, oldFloorObject?: FloorObject): FloorObject {

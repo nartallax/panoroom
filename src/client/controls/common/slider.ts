@@ -79,6 +79,9 @@ export function slider(options: SliderOptions): Slider {
 		onDrag: ({x}) => {
 			let percent = Math.max(0, Math.min(1, (x - minX) / (maxX - minX)));
 			let value = options.min + ((options.max - options.min) * percent);
+			if(options.integer){
+				value = Math.round(value);
+			}
 			valueContainer(value);
 		}
 	})

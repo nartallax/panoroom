@@ -11,7 +11,8 @@ import {makeNodeBoundWatcher} from "controls/control";
 export function getSettingsEditControls(context: AppContext): HTMLElement {
 	let wireframeButton = button({
 		text: "Грани", 
-		onclick: () => context.settings.skyboxWireframe(!context.settings.skyboxWireframe())
+		onclick: () => context.state.skyboxWireframe(!context.state.skyboxWireframe()),
+		active: context.state.skyboxWireframe
 	});	
 
 	let setDefaultPanoramButton = button({
@@ -23,6 +24,16 @@ export function getSettingsEditControls(context: AppContext): HTMLElement {
 			context.settings.startPanoramRotY(context.skybox.camera.rotation.y);
 		}
 	});
+
+
+	let freelookButton = button({
+		text: "Свободная камера",
+		active: context.state.skyboxFreelook,
+		onclick: () => {
+			context.state.skyboxFreelook(!context.state.skyboxFreelook());
+		}
+	});
+
 
 	let panoramRotation = slider({
 		label: "Поворот",
@@ -40,7 +51,7 @@ export function getSettingsEditControls(context: AppContext): HTMLElement {
 			getSaveButton(context)
 		]),
 		tag({class: "button-toolbar"}, [
-			setDefaultPanoramButton
+			setDefaultPanoramButton, freelookButton
 		]),
 		collapser({text: "Камера"}, [
 			slider({
@@ -81,6 +92,15 @@ export function getSettingsEditControls(context: AppContext): HTMLElement {
 				label: "Боковые сегменты",
 				min: 3, value: context.settings.skyboxRadialSegments, max: 512,
 				integer: true
+			}),
+			slider({
+				label: "Вертикальные сегменты",
+				min: 1, value: context.settings.skyboxHeightSegments, max: 128,
+				integer: true
+			}),
+			slider({
+				label: "Бочкообразность",
+				min: 0, value: context.settings.skyboxBarrelness, max: 2
 			})
 		]),
 		collapser({text: "Прочее"}, [

@@ -8,7 +8,8 @@ export interface ViewSettings {
 	skyboxHeight: number;
 	skyboxRadius: number;
 	skyboxRadialSegments: number;
-	skyboxWireframe: boolean;
+	skyboxHeightSegments: number;
+	skyboxBarrelness: number;
 	minPitch: number;
 	maxPitch: number;
 	cameraRotationSpeed: number;
@@ -25,8 +26,9 @@ export const defaultViewSettings: ViewSettings = {
 	minPitch: -(Math.PI / 2),
 	skyboxHeight: 3.5,
 	skyboxRadius: 1.5,
-	skyboxWireframe: false,
 	skyboxRadialSegments: 64,
+	skyboxHeightSegments: 1,
+	skyboxBarrelness: 0,
 	cameraRotationSpeed: 1 / 350,
 	planLabelScale: 1 / 20,
 	panoramLabelScale: 1 / 100

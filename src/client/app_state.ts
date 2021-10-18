@@ -27,4 +27,6 @@ export class AppState {
 	readonly isInLinkMode = boundValue(false);
 	readonly selectedLinkType = boundValue<PanoramLinkType>("step");
 	readonly currentDisplayedPanoram = boundValue(null as string | null)
+	readonly skyboxWireframe = boundValue(false)
+	readonly skyboxFreelook = boundValue(false)
 }

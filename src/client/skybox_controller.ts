@@ -1,7 +1,9 @@
 import {Boundable, MbBoundable, unwrapBoundable} from "boundable/boundable";
 import {PanoramLink} from "building_plan";
 import {AppContext} from "context";
+import {makeBarrelWarper, stretchCylinderTopBottom, warpCylinderWalls} from "cylinder_stretching";
 import {GizmoController} from "gizmo_controller";
+import {KeyboardCameraControls, setupKeyboardCameraMovement} from "keyboard_camera_movement";
 import {SettingsController} from "settings_controller";
 import {isInteractiveObject, THREE} from "threejs_decl";
 import {addDragListeners} from "utils/drag";
@@ -25,8 +27,9 @@ export class SkyboxController extends GizmoController {
 	private currentSkyboxObject: THREE.Mesh | THREE.Line;
 	private skyboxGroup: THREE.Group;
 	private linkObjects = {} as {[panoramId: string]: LinkObject}
+	private keyboardCameraControls: KeyboardCameraControls | null = null;
 
-	constructor(private readonly settings: SettingsController, context: AppContext, readonly targetPanoram: MbBoundable<string | null> = null, initialCameraRotation: {x: number, y: number} | null = null){
+	constructor(private readonly settings: SettingsController, context: AppContext, readonly targetPanoram: MbBoundable<string | null> = null, initialCameraRotation: {x: number, y: number} | null = null, private freelook: MbBoundable<boolean | null> = null){
 		super(context);
 		new THREE.Interaction(this.renderer, this.scene, this.camera);
 		let {object, geometry} = this.createSkybox();
@@ -52,7 +55,7 @@ export class SkyboxController extends GizmoController {
 				this.watch(boundable, () => this.updateCamera());
 			});
 
-		[settings.skyboxHeight, settings.skyboxRadius, settings.skyboxWireframe, settings.skyboxRadialSegments]
+		[settings.skyboxHeight, settings.skyboxRadius, context.state.skyboxWireframe, settings.skyboxRadialSegments, settings.skyboxHeightSegments, settings.skyboxBarrelness]
 			.forEach((boundable: Boundable<unknown>) => {
 				this.watch(boundable, () => {
 					this.updateSkyboxShape()
@@ -94,6 +97,38 @@ export class SkyboxController extends GizmoController {
 		})
 
 		this.setupUserControls();
+
+		this.watch(freelook, () => {
+			if(!this.isActive){
+				return;
+			}
+			this.updateFreelooking();
+		})
+	}
+
+	private updateFreelooking(): void {
+		if(unwrapBoundable(this.freelook)){
+			if(!this.keyboardCameraControls){
+				this.keyboardCameraControls = setupKeyboardCameraMovement(this.camera, this.getKeyboardCameraMovingSpeed())
+			}
+		} else {
+			if(this.keyboardCameraControls){
+				this.keyboardCameraControls.clear();
+				this.keyboardCameraControls = null;
+			}
+			this.updateCamera();
+		}
+	}
+
+	protected onFrame(timePassed: number): void {
+		super.onFrame(timePassed);
+		if(this.keyboardCameraControls){
+			this.keyboardCameraControls.onFrame(timePassed);
+		}
+	}
+
+	protected getKeyboardCameraMovingSpeed(): number {
+		return 5;
 	}
 
 	protected setupUserControls(): void {
@@ -115,6 +150,19 @@ export class SkyboxController extends GizmoController {
 				}
 			}
 		});
+	}
+
+	start(container: HTMLElement): void {
+		super.start(container);
+		this.updateFreelooking();
+	}
+
+	stop(): void {
+		super.stop();
+		if(this.keyboardCameraControls){
+			this.keyboardCameraControls.clear();
+			this.keyboardCameraControls = null;
+		}
 	}
 
 	private createSkybox(): {object: THREE.Mesh | THREE.Line, geometry: THREE.BufferGeometry} {
@@ -268,11 +316,13 @@ export class SkyboxController extends GizmoController {
 			this.settings.skyboxRadius() * 1000, 
 			this.settings.skyboxRadius() * 1000, 
 			this.settings.skyboxHeight() * 1000, 
-			this.settings.skyboxRadialSegments()
+			this.settings.skyboxRadialSegments(),
+			this.settings.skyboxHeightSegments()
 		);
-		patchCylinderUV(geometry);
+		stretchCylinderTopBottom(geometry, this.settings.skyboxRadialSegments(), this.settings.skyboxHeightSegments());
+		warpCylinderWalls(geometry, makeBarrelWarper(this.settings.skyboxBarrelness()));
 		let object: THREE.Mesh | THREE.Line;
-		if(this.settings.skyboxWireframe()){
+		if(this.context.state.skyboxWireframe()){
 			object = new THREE.Line(geometry);
 		} else {
 			object = new THREE.Mesh(geometry);
@@ -322,8 +372,11 @@ export class SkyboxController extends GizmoController {
 
 	protected updateCamera(): void {
 		this.camera.fov = this.settings.fov();
-		this.camera.position.y = this.settings.cameraHeight() * 1000;
-		this.camera.rotation.x = this.clampPitch(this.camera.rotation.x)
+		if(!unwrapBoundable(this.freelook)){
+			this.camera.position.x = this.camera.position.z = 0;
+			this.camera.position.y = this.settings.cameraHeight() * 1000;
+			this.camera.rotation.x = this.clampPitch(this.camera.rotation.x)
+		}
 		this.camera.updateProjectionMatrix();
 	}
 
@@ -345,63 +398,4 @@ export class SkyboxController extends GizmoController {
 		this.skyboxGroup.rotation.y = panoram.position.rotation;
 	}
 
-}
-
-/* меняем UV-маппинг у цилиндра так, чтобы на верхнюю и нижнюю крышку растягивались края панорамы
-ориентируемся мы при этом на нормали, так что если когда-то threejs поменяет логику их генерации - то тут сломается */
-function patchCylinderUV(geom: THREE.BufferGeometry): void {
-	let cylinderSideUVs = new Map<string, {x: number, y: number}>(); 
-	let pos = geom.attributes.position;
-	let uv = geom.attributes.uv;
-	let norm = geom.attributes.normal;
-	
-	function makePosKey(i: number): string {
-		return pos.getX(i).toFixed(3) + "|" + pos.getY(i).toFixed(3) + "|" + pos.getZ(i).toFixed(3);
-	}
-
-	for(let i = 0; i < uv.count; i++){
-		let normY = norm.getY(i)
-		if(normY < 0.0001 && normY > -0.0001){
-			// если нормаль к поверхности в данной точки горизонтальна, т.е. имеет y = 0
-			// то этот вертекс относится к боку цилиндра, и нам нужно сохранить его uv
-			// TODO: как-то более изящно хранить? по ключу из трех значений
-			cylinderSideUVs.set(makePosKey(i), {x: uv.getX(i), y: uv.getY(i)});
-		}
-	}
-
-	// лютый хак, некрасиво, сломается, нужно как-нибудь переделать, но не знаю, как
-	// сначала считаем количество сторон из количества вертексов
-	// потом используем его, чтобы понять, с каких индексов начинаются "центральные" вертексы
-	// чтобы потом прописать им правильные uv-мапы
-	let sideCount = (uv.count - 4) / 6
-	let topCenterVertexIndexStart = (sideCount * 2) + 2;
-	let bottomCenterVertexIndexStart = (sideCount * 4) + 3;
-	for(let i = 0; i < uv.count; i++){
-		let normY = norm.getY(i)
-		if(normY > 0.0001 || normY < -0.0001){
-			// если нормаль к поверхности в данной точки НЕ горизонтальна, т.е. имеет y != 0
-			// то этот вертекс относится к одной из крышек цилиндра, и нам нужно перезаписать его UV
-			// значение UV мы возьмем с вертекса бока цилиндра с теми же координатами
-			let posX = pos.getX(i), posZ = pos.getZ(i);
-			if(posX < 0.0001 && posX > -0.0001 && posZ < 0.0001 && posZ > -0.0001){
-				// особый случай - центр крышки. аналогичного вертекса на боку нет
-				let isTop = normY > 0;
-				let indexStart = isTop? topCenterVertexIndexStart: bottomCenterVertexIndexStart;
-				let offset = ((i - indexStart) + 0.5) / sideCount;
-				uv.setX(i, offset);
-				uv.setY(i, isTop? 1: 0);
-			} else {
-				let goodUV = cylinderSideUVs.get(makePosKey(i));
-				if(goodUV){
-					uv.setX(i, goodUV.x);
-					uv.setY(i, goodUV.y);
-				} else {
-					// щито поделать десу
-					console.warn(`Found NO good UV for position ${pos.getX(i)},${pos.getY(i)},${pos.getZ(i)}`);
-				}
-			}
-		}
-	}
-
-	uv.needsUpdate = true;
 }
