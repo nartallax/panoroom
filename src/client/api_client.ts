@@ -1,4 +1,5 @@
 import {BuildingPlan} from "building_plan";
+import {FrontHtmlSourceData} from "front_html";
 import {ViewSettings} from "settings_controller";
 import {FsTreeNode, logWarn} from "utils";
 
@@ -72,6 +73,10 @@ export class ApiClient {
 			logWarn("Got error trying to determine if I am allowed to edit. Guess not. ", e);
 			return false;
 		}
+	}
+
+	updateHtml(params: FrontHtmlSourceData): Promise<void>{
+		return this.callApi("updateHtml", [params]);
 	}
 
 }

@@ -7,6 +7,7 @@ import {tag} from "utils/dom_utils";
 import {panel} from "controls/common/panel";
 import {computable, unwrapBoundable} from "boundable/boundable";
 import {makeNodeBoundWatcher} from "controls/control";
+import {textInput} from "controls/common/text_input";
 
 export function getSettingsEditControls(context: AppContext): HTMLElement {
 	let wireframeButton = button({
@@ -41,6 +42,15 @@ export function getSettingsEditControls(context: AppContext): HTMLElement {
 		max: 360,
 		value: 0
 	});
+
+
+	context.state.htmlTitle(document.title)
+	let descriptionEl = document.head.querySelector('meta[name="description"]');
+	if(descriptionEl){
+		context.state.htmlDescription(descriptionEl.getAttribute("content") || "");
+	} else {
+		console.warn("No description element found. That's strange.")
+	}
 	
 	let result = panel({ 
 		class: "settings-edit-controls-container",
@@ -107,7 +117,15 @@ export function getSettingsEditControls(context: AppContext): HTMLElement {
 			slider({
 				label: "Размер текста (панорамы)",
 				min: 0.001 / 5, value: context.settings.panoramLabelScale, max: 0.001 * 2
-			})
+			}),
+			tag({class: "button-toolbar"}, [
+				tag({class: "label editor", text: "Title"}),
+				textInput({ value: context.state.htmlTitle }),
+			]),
+			tag({class: "button-toolbar"}, [
+				tag({class: "label editor", text: "Description"}),
+				textInput({ value: context.state.htmlDescription })
+			]),
 		])
 	])
 
@@ -138,6 +156,13 @@ export function getSettingsEditControls(context: AppContext): HTMLElement {
 
 		panoram.position.rotation = (rotationGrad / 180) * Math.PI
 		context.settings.panorams.notify();
+	})
+
+	watch(context.state.htmlTitle, title => document.title = title)
+	watch(context.state.htmlDescription, description => {
+		if(descriptionEl){
+			descriptionEl.setAttribute("content", description);
+		}
 	})
 
 	return result;

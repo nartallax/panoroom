@@ -5,6 +5,7 @@ import {panel} from "controls/common/panel";
 import {makeNodeBoundWatcher} from "controls/control";
 import {getSettingsEditControls} from "controls/composite/settings_edit_controls";
 import {getPlanEditControls} from "controls/composite/plan_edit/plan_edit_controls";
+import {computable} from "boundable/boundable";
 
 export interface LayoutControllerOptions {
 	canEdit: boolean;
@@ -29,11 +30,15 @@ export class LayoutController {
 				active: this.context.state.isInEditMode,
 				onclick: () => this.context.state.isInEditMode(!this.context.state.isInEditMode())
 			}),
-			button({
-				text: "План", 
-				active: this.context.state.isPlanActive,
-				onclick: () => this.context.state.isPlanActive(!this.context.state.isPlanActive())
-			})
+			panel({
+				hidden: computable(() => !this.context.state.isInEditMode())
+			}, [
+				button({
+					text: "План", 
+					active: this.context.state.isPlanActive,
+					onclick: () => this.context.state.isPlanActive(!this.context.state.isPlanActive())
+				})
+			]),
 		]));
 
 		this.options.root.appendChild(getSettingsEditControls(this.context));

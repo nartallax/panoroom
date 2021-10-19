@@ -29,4 +29,6 @@ export class AppState {
 	readonly currentDisplayedPanoram = boundValue(null as string | null)
 	readonly skyboxWireframe = boundValue(false)
 	readonly skyboxFreelook = boundValue(false)
+	readonly htmlTitle = boundValue("")
+	readonly htmlDescription = boundValue("")
 }

@@ -104,9 +104,14 @@ export class SettingsController extends wrapWithBoundables(defaultSettingsPack) 
 			this.setToValues(plan);
 		}
 
+		let notifyUnsavedChanges = () => {
+			this.hasUnsavedChanges(true)
+		}
 		(Object.keys(defaultSettingsPack) as (keyof typeof defaultSettingsPack)[]).forEach(key => {
-			this[key].subscribe(() => this.hasUnsavedChanges(true));
+			this[key].subscribe(notifyUnsavedChanges);
 		});
+		this.context.state.htmlDescription.subscribe(notifyUnsavedChanges)
+		this.context.state.htmlTitle.subscribe(notifyUnsavedChanges)
 	}
 
 	clone(viewSettings: Partial<ViewSettings> | null = null, plan: Partial<BuildingPlan> | null = null): SettingsController {
@@ -143,69 +148,14 @@ export class SettingsController extends wrapWithBoundables(defaultSettingsPack) 
 
 		await Promise.all([
 			this.context.api.saveViewSettings(this.viewSettings),
-			this.context.api.saveBuildingPlan(buildingPlan)
+			this.context.api.saveBuildingPlan(buildingPlan),
+			this.context.api.updateHtml({
+				title: this.context.state.htmlTitle(),
+				description: this.context.state.htmlDescription()
+			})
 		]);
 
 		this.hasUnsavedChanges(false);
 	}
-
-	/*
-cameraHeight
-
-	get cameraRotationSpeed(): number { return this.viewSettings.cameraRotationSpeed }
-	set cameraRotationSpeed(v: number){
-		this.viewSettings.cameraRotationSpeed = v;
-		this.haveUnsavedChanges(true);
-	}
-
-	get skyboxHeight(): number { return this.viewSettings.skyboxHeight }
-	set skyboxHeight(v: number){
-		this.viewSettings.skyboxHeight = v;
-		this.haveUnsavedChanges(true);
-		this.onSkyboxShapeUpdated.fire();
-	}
-
-	get skyboxRadius(): number { return this.viewSettings.skyboxRadius }
-	set skyboxRadius(v: number){
-		this.viewSettings.skyboxRadius = v;
-		this.haveUnsavedChanges(true);
-		this.onSkyboxShapeUpdated.fire();
-	}
-
-	get fov(): number { return this.viewSettings.fov }
-	set fov(v: number){
-		this.viewSettings.fov = v;
-		this.haveUnsavedChanges(true);
-		this.onCameraSettingsUpdated.fire();
-	}
-
-	get minPitch(): number { return this.viewSettings.minPitch }
-	set minPitch(v: number){
-		this.viewSettings.minPitch = v;
-		this.haveUnsavedChanges(true);
-		this.onCameraSettingsUpdated.fire();
-	}
-
-	get maxPitch(): number { return this.viewSettings.maxPitch }
-	set maxPitch(v: number){
-		this.viewSettings.maxPitch = v;
-		this.haveUnsavedChanges(true);
-		this.onCameraSettingsUpdated.fire();
-	}
-
-	get skyboxWireframe(): boolean { return this.viewSettings.skyboxWireframe }
-	set skyboxWireframe(v: boolean){
-		this.viewSettings.skyboxWireframe = v;
-		this.haveUnsavedChanges(true);
-		this.onSkyboxShapeUpdated.fire();
-	}
-
-	get skyboxRadialSegments(): number { return this.viewSettings.skyboxRadialSegments }
-	set skyboxRadialSegments(v: number) { 
-		this.viewSettings.skyboxRadialSegments = Math.round(v);
-		this.haveUnsavedChanges(true);
-		this.onSkyboxShapeUpdated.fire();
-	}
-	*/
 
 }
