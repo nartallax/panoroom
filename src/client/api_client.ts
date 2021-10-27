@@ -68,7 +68,7 @@ export class ApiClient {
 
 	async canEdit(): Promise<boolean>{
 		try {
-			return this.callApi("canEdit")
+			return await this.callApi("canEdit")
 		} catch(e){
 			logWarn("Got error trying to determine if I am allowed to edit. Guess not. ", e);
 			return false;

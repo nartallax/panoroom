@@ -1,2 +1,5 @@
 js
 node_modules
+content/img
+content/static/view_settings.json
+content/static/building_plan.json
